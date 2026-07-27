@@ -107,6 +107,20 @@ const schema = z.object({
    */
   PLAY_STORE_HTML: bool(true),
 
+  /**
+   * Attempt our own top-chart RPC before falling back to the library.
+   *
+   * OFF by default because it does not work yet. Play loads charts through
+   * `batchexecute` and our request, though byte-identical in body to a working
+   * one, still receives an empty stream: the library's HTTP client carries a
+   * cookie jar and defaults we have not matched.
+   *
+   * Shipping an attempt that always fails costs a wasted request per chart and
+   * a confusing warning in the log, so the default is not to try. The code is
+   * complete and tested; turn this on to work on it.
+   */
+  PLAY_OWN_CHARTS: bool(false),
+
   // Backoff on failure.
   BACKOFF_BASE_MS: int(5000),
   BACKOFF_MAX_MS: int(30 * 60 * 1000),

@@ -249,7 +249,7 @@ export async function fetchList(params: PlayListParams): Promise<Record<string, 
    * then the charts keep working, which matters more than the purity of the
    * dependency graph, and the log says plainly which one served the request.
    */
-  if (config.PLAY_PARSER === 'own') {
+  if (config.PLAY_PARSER === 'own' && config.PLAY_OWN_CHARTS) {
     try {
       const apps = await fetchChart({
         collection: params.collection,

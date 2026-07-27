@@ -196,13 +196,24 @@ export async function fetchChart(params: ChartParams): Promise<ListedApp[]> {
     }),
   )
 
+  /**
+   * A failure here must NOT trip the shared Play circuit breaker.
+   *
+   * The breaker exists to say "Google is refusing us", and opening it stops
+   * every other Play request: listings, search, everything. This RPC failing
+   * says something narrower and entirely about us, that our request shape is not
+   * accepted, and letting that take the whole source down is how one
+   * experimental code path poisons four working ones.
+   *
+   * Found exactly that way: a clean-clone ingest returned twelve Steam titles
+   * and zero from Play, because the first chart attempt opened the breaker and
+   * every listing fetch after it was refused before it left the process.
+   */
   const payload = parseBatchExecute(text, PLAY_LIST_RPC_ID)
   if (payload === null) {
-    const error = new SourceError('play', 'malformed', 'Play chart RPC returned nothing usable.', {
+    throw new SourceError('play', 'malformed', 'Play chart RPC returned nothing usable.', {
       detail: { collection: params.collection, category: params.category, bytes: text.length },
     })
-    pacers.play.recordFailure(error)
-    throw error
   }
 
   const apps = extractAppList(new Map([['chart', payload]]), {
@@ -212,16 +223,13 @@ export async function fetchChart(params: ChartParams): Promise<ListedApp[]> {
   })
 
   if (apps.length === 0) {
-    const error = new SourceError(
+    throw new SourceError(
       'play',
       'malformed',
-      'Play chart RPC returned no apps. Play publishes no empty charts, so the request shape is no longer accepted.',
+      'Play chart RPC returned no apps. Play publishes no empty charts, so the request shape is not being accepted.',
       { detail: { collection: params.collection, category: params.category } },
     )
-    pacers.play.recordFailure(error)
-    throw error
   }
 
-  pacers.play.recordSuccess()
   return apps
 }
