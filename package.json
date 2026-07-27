@@ -15,7 +15,8 @@
     "ingest": "bun src/cli/ingest.ts",
     "ratecheck": "bun src/cli/ratecheck.ts",
     "seed": "bun src/cli/seed.ts",
-    "docker:build": "docker build -t store-data-api ."
+    "docker:build": "docker build -t store-data-api .",
+    "compare-parsers": "bun src/cli/compare-parsers.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.3.11",

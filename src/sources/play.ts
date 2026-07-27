@@ -17,6 +17,8 @@ import { config } from '../config.ts'
 import { pacers } from '../lib/pacer.ts'
 import { SourceError } from '../lib/source-errors.ts'
 import { logger } from '../lib/logger.ts'
+import * as ownParser from './play-parser/index.ts'
+import type { ExtractionReport as OwnExtractionReport } from './play-parser/index.ts'
 
 /**
  * Options handed to the HTTP client inside google-play-scraper. Both settings are
@@ -145,6 +147,29 @@ async function paced<T>(fn: () => Promise<T>, context: Record<string, unknown>):
     pacers.play.recordFailure(classified)
     throw classified
   }
+}
+
+export interface PlayAppResult {
+  app: PlayRawApp
+  /** Present when our own parser ran; the library never exposes the page. */
+  html?: string
+  /** Present when our own parser ran: which strategy answered each field. */
+  report?: OwnExtractionReport
+}
+
+/**
+ * One listing, through whichever parser is configured.
+ *
+ * `PLAY_PARSER=own` uses ours, which additionally returns the page itself and a
+ * report of how each field was resolved. `library` uses google-play-scraper and
+ * returns neither, because it never exposes the page it fetched.
+ */
+export async function fetchAppDetailed(params: PlayAppParams): Promise<PlayAppResult> {
+  if (config.PLAY_PARSER === 'own') {
+    const result = await ownParser.fetchApp(params)
+    return { app: result.app as PlayRawApp, html: result.html, report: result.report }
+  }
+  return { app: await fetchApp(params) }
 }
 
 export async function fetchApp(params: PlayAppParams): Promise<PlayRawApp> {

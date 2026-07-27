@@ -76,6 +76,29 @@ const schema = z.object({
   STEAMSPY_ENABLED: bool(true),
   STEAMSPY_PAGES: int(3),
 
+  /**
+   * Which Google Play parser to use.
+   *
+   *   library  google-play-scraper. The default until parity is demonstrated.
+   *   own      our own parser (src/sources/play-parser).
+   *
+   * Defaulting to the library is deliberate. Ours reads the page twice and
+   * cross-checks, which is a real improvement, but "better designed" is not
+   * "proven equivalent on live listings". `bun run compare-parsers` produces
+   * that evidence; the default moves when the evidence does, not before.
+   */
+  PLAY_PARSER: z.enum(['library', 'own']).default('library'),
+
+  /**
+   * Keep the page HTML alongside the parsed result.
+   *
+   * Until now Play stored the library's OUTPUT as its raw payload, which meant
+   * reprocessing could only re-run our normalizer and could never fix a
+   * parser-level mistake. The other two sources stored real API responses, so
+   * the promise held for them and quietly did not for Play.
+   */
+  PLAY_STORE_HTML: bool(true),
+
   // Backoff on failure.
   BACKOFF_BASE_MS: int(5000),
   BACKOFF_MAX_MS: int(30 * 60 * 1000),

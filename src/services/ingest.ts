@@ -166,7 +166,12 @@ export async function ingestPlayApp(
 ): Promise<IngestOutcome> {
   const startedAt = Date.now()
   try {
-    const raw = await play.fetchApp({ appId, country: opts.country, lang: opts.lang })
+    const fetched = await play.fetchAppDetailed({
+      appId,
+      country: opts.country,
+      lang: opts.lang,
+    })
+    const raw = fetched.app
 
     // Raw first. If normalization is wrong today, this is what fixes it tomorrow
     // without another request.
@@ -179,6 +184,36 @@ export async function ingestPlayApp(
       url: typeof raw.url === 'string' ? raw.url : null,
       payload: raw,
     })
+
+    /**
+     * The page itself, when our own parser ran.
+     *
+     * The payload above is a PARSED object, so reprocessing it can only re-run
+     * our normalizer: it can never correct a parser-level mistake. The other two
+     * sources store real API responses, so "reprocess without re-fetching" held
+     * for them and quietly did not for Play. Storing the HTML closes that, and
+     * it is also the corpus a future parser gets validated against.
+     */
+    if (fetched.html && config.PLAY_STORE_HTML) {
+      await storeRaw({
+        source: 'play',
+        kind: 'app_html',
+        sourceId: appId,
+        country: opts.country,
+        lang: opts.lang,
+        url: typeof raw.url === 'string' ? raw.url : null,
+        payload: { html: fetched.html, bytes: fetched.html.length },
+      })
+    }
+
+    // Drift surfaced by the cross-check is worth a log line even when the record
+    // is fine: it is the early warning that coordinates are going stale.
+    if (fetched.report && fetched.report.drift.length > 0) {
+      logger.warn('play parser drift: structured data and coordinates disagree', {
+        appId,
+        fields: fetched.report.drift.map((d) => d.field),
+      })
+    }
 
     let iosId: string | null = null
     if (opts.resolveIosMatch && typeof raw.title === 'string') {
