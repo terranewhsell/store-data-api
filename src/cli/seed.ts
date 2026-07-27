@@ -223,6 +223,30 @@ async function main(): Promise<void> {
   const elapsed = (Date.now() - startedAt) / 1000
   const status = await getStatus()
 
+  /**
+   * A source that was asked for and produced nothing gets said out loud.
+   *
+   * `/v1/status` reports the service as healthy in this case, and correctly so:
+   * nothing is broken, the store simply refused us. But a run that ends with
+   * "healthy: true" beside a source at zero reads as everything being fine, and
+   * it is not fine that a third of the catalogue is missing.
+   *
+   * Seen for real: Apple began answering 403 after a day of requests from this
+   * IP, the circuit breaker did its job, and the summary still looked clean.
+   */
+  const empty = status.sources
+    .filter((s) => sources.includes(s.source) && s.apps === 0)
+    .map((s) => s.source)
+
+  if (empty.length > 0) {
+    logger.warn('a requested source produced nothing', {
+      sources: empty,
+      likely_cause:
+        'the store refused or timed out; check `events24h` in /v1/status for the classification',
+      note: 'the ingest is not broken, but the catalogue is incomplete for these sources',
+    })
+  }
+
   logger.info('seed finished', {
     fetched,
     elapsed_seconds: Number(elapsed.toFixed(1)),
@@ -237,6 +261,7 @@ async function main(): Promise<void> {
     pacers: allPacerStates().map((p) => ({ source: p.source, sent: p.requestsSent, state: p.state })),
     healthy: status.healthy,
     warnings: status.warnings,
+    sources_with_no_results: empty,
   })
 }
 
