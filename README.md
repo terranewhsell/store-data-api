@@ -22,37 +22,53 @@ cp .env.example .env      # set API_BEARER_TOKEN (openssl rand -hex 32)
 docker compose up --build # API on http://localhost:3000
 ```
 
-Or without Docker:
-
-```bash
-cp .env.example .env      # set API_BEARER_TOKEN and DATABASE_URL
-bun install
-bun run db:migrate
-bun run start
-```
-
-A Postgres for local work, if you do not have one:
+Or without Docker, against a Postgres you start yourself:
 
 ```bash
 docker run -d --name storedata-pg \
   -e POSTGRES_PASSWORD=storedata -e POSTGRES_USER=storedata -e POSTGRES_DB=storedata \
   -p 55432:5432 postgres:17-alpine
+
+cp .env.example .env      # set API_BEARER_TOKEN
+bun install
+bun run db:migrate
+bun run start
 ```
 
-`DATABASE_URL` also accepts `pglite://./data/pgdata`, an embedded Postgres that
-needs no server. Same engine, same schema, same SQL: it is what the test suite
-runs on.
-
 ```bash
-bun test          # 186 tests
+bun test
 bun run typecheck
 ```
 
-The service starts with an empty catalogue. Fill it:
+**The service starts with an empty catalogue.** Only `/v1/categories` has data
+out of the box, because it is a static file. Fill the rest:
 
 ```bash
 bun run seed --apps 500
 ```
+
+### About `pglite://`
+
+`DATABASE_URL` also accepts `pglite://./data/pgdata`, an embedded Postgres that
+needs no server at all. Same engine, same schema, same SQL: it is what the test
+suite runs on.
+
+**It is single-process.** Two processes opening the same directory do not share
+it, they overwrite each other. Left unguarded the symptom is brutal: the ingest
+reports rows written, the API keeps answering zero, and restarting does not help
+because the server flushes its own stale state back over the file on shutdown.
+Every part of that looks like success, so the natural conclusion is that the
+ingest is broken, and it is not.
+
+| Use `pglite://` for | Use Postgres for |
+|---|---|
+| `bun test` | the API and an ingest running together |
+| one `bun run ingest ...` with nothing else running | anything shared, and every deployment |
+
+The service enforces this rather than trusting you to remember it. A second
+process opening the same directory refuses to start, names the PID holding it,
+and prints the Postgres command to use instead. It will never silently serve an
+empty catalogue.
 
 ---
 
