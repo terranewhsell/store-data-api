@@ -138,33 +138,64 @@ async function main(): Promise<void> {
   const discovered = await discover()
   logger.info('discovery finished', { discovered, queue: await queueStats() })
 
-  // Fetch in batches so progress is visible and an interruption loses at most
-  // one batch. The queue is durable, so re-running picks up where this stopped.
-  const BATCH = 50
+  /**
+   * Fetch in batches, cycling through the sources.
+   *
+   * The queue is ordered by priority, and Play rankings outrank the Apple and
+   * Steam charts because that is the right order for a full build. But it means
+   * a small run drains entirely from Play and leaves /v1/steam empty, which
+   * looks like a broken integration rather than a short run. So the budget is
+   * split across the requested sources and each is promoted under its own
+   * filter.
+   *
+   * A source that runs out of work early does not waste its share: the loop
+   * keeps cycling and the remaining sources absorb the rest.
+   */
+  const BATCH = 25
   let fetched = 0
+  const exhausted = new Set<Source>()
 
   for (const market of markets) {
-    while (fetched < targetApps) {
-      const promoted = await promoteDiscoveries({
-        limit: Math.min(BATCH, targetApps - fetched),
-        country: market.country,
-        lang: market.lang,
-      })
-      if (promoted === 0) break
+    while (fetched < targetApps && exhausted.size < sources.length) {
+      for (const source of sources) {
+        if (fetched >= targetApps) break
+        if (exhausted.has(source)) continue
 
-      const before = Date.now()
-      const result = await drainQueue(promoted)
-      fetched += result.processed
+        const share = Math.max(
+          1,
+          Math.min(
+            BATCH,
+            Math.ceil((targetApps - fetched) / Math.max(1, sources.length - exhausted.size)),
+          ),
+        )
 
-      logger.info('batch done', {
-        fetched,
-        target: targetApps,
-        batch_seconds: Number(((Date.now() - before) / 1000).toFixed(1)),
-        market,
-      })
+        const promoted = await promoteDiscoveries({
+          limit: share,
+          country: market.country,
+          lang: market.lang,
+          source,
+        })
+        if (promoted === 0) {
+          exhausted.add(source)
+          continue
+        }
 
-      if (result.processed === 0) break
+        const before = Date.now()
+        const result = await drainQueue(promoted)
+        fetched += result.processed
+
+        logger.info('batch done', {
+          source,
+          fetched,
+          target: targetApps,
+          batch_seconds: Number(((Date.now() - before) / 1000).toFixed(1)),
+          market,
+        })
+
+        if (result.processed === 0) exhausted.add(source)
+      }
     }
+    exhausted.clear()
   }
 
   const elapsed = (Date.now() - startedAt) / 1000
