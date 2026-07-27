@@ -44,7 +44,7 @@ needs no server. Same engine, same schema, same SQL: it is what the test suite
 runs on.
 
 ```bash
-bun test          # 150 tests
+bun test          # 186 tests
 bun run typecheck
 ```
 
