@@ -146,6 +146,13 @@ export const pacers: Record<SourceName, Pacer> = {
   play: new Pacer('play', config.RATE_PLAY_MIN_INTERVAL_MS, config.RATE_PLAY_MAX_INTERVAL_MS),
   ios: new Pacer('ios', config.RATE_IOS_MIN_INTERVAL_MS, config.RATE_IOS_MAX_INTERVAL_MS),
   steam: new Pacer('steam', config.RATE_STEAM_MIN_INTERVAL_MS, config.RATE_STEAM_MAX_INTERVAL_MS),
+  // A courtesy API run by one person. Its documented per-request limit is one
+  // per second; the bulk endpoint holds its own 60 s gate in sources/steamspy.ts.
+  steamspy: new Pacer(
+    'steamspy',
+    config.RATE_STEAMSPY_MIN_INTERVAL_MS,
+    config.RATE_STEAMSPY_MAX_INTERVAL_MS,
+  ),
 }
 
 export function allPacerStates(): PacerState[] {

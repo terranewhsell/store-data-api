@@ -28,6 +28,7 @@ import {
 import { appSlug, disambiguateSlug } from '../lib/slug.ts'
 import { logger } from '../lib/logger.ts'
 import type { NormalizedApp, Source } from '../normalize/contract.ts'
+import type { SourceName } from '../lib/source-errors.ts'
 import { contentDigest } from '../normalize/shared.ts'
 
 /** Postgres unique-violation SQLSTATE. */
@@ -229,6 +230,7 @@ export async function storeLocale(
     country: normalized.country,
     lang: normalized.lang,
     core: normalized.core,
+    common: normalized.common,
     extra: normalized.extra,
     coverage: { fieldCoverage: normalized.coverage, derivedFields: normalized.derived },
     searchText: normalized.searchText,
@@ -337,7 +339,8 @@ export async function recordEvent(input: {
 }
 
 export async function saveSourceHealth(input: {
-  source: Source
+  /** Wider than the contract `Source`: auxiliary providers get a row too. */
+  source: SourceName
   state: string
   consecutiveFailures: number
   blockedUntil: Date | null

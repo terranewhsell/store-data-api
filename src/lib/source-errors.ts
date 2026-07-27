@@ -7,7 +7,13 @@
  * like real data forever. So an unexpected shape is an error, the job is marked,
  * and nothing is written to the canonical tables.
  */
-export type SourceName = 'play' | 'ios' | 'steam'
+/**
+ * Internal provider identity. Wider than the contract's `Source`, which stays
+ * play | ios | steam: SteamSpy is an auxiliary provider FOR the steam source,
+ * not a fourth store. Keeping the two types separate is what stops an
+ * implementation detail from leaking into the published contract.
+ */
+export type SourceName = 'play' | 'ios' | 'steam' | 'steamspy'
 
 export type SourceErrorKind =
   | 'blocked' // 403 / captcha / consent wall: we are being refused

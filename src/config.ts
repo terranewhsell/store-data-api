@@ -64,6 +64,17 @@ const schema = z.object({
   RATE_IOS_MAX_INTERVAL_MS: int(3500),
   RATE_STEAM_MIN_INTERVAL_MS: int(1500),
   RATE_STEAM_MAX_INTERVAL_MS: int(2000),
+  // SteamSpy documents one request per second outside its bulk endpoint.
+  RATE_STEAMSPY_MIN_INTERVAL_MS: int(1100),
+  RATE_STEAMSPY_MAX_INTERVAL_MS: int(1500),
+
+  /**
+   * Use SteamSpy to pre-fill Steam review counts in bulk. Off by default: it is
+   * a third party and its numbers lag Valve's by roughly 9 percent, so enabling
+   * it is a deliberate trade of accuracy for thousands of saved requests.
+   */
+  STEAMSPY_ENABLED: bool(true),
+  STEAMSPY_PAGES: int(3),
 
   // Backoff on failure.
   BACKOFF_BASE_MS: int(5000),

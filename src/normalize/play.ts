@@ -15,6 +15,7 @@ import {
   type Histogram,
   type NormalizedApp,
 } from './contract.ts'
+import { buildCommon, playMinimumOs, reviewSummaryFromHistogram } from './common.ts'
 import { completeCoverage } from './coverage.ts'
 import {
   bool,
@@ -149,6 +150,18 @@ export function normalizePlayApp(
 
   return {
     core,
+    /**
+     * Play is the only source with a real five-star histogram, so its
+     * positive/negative split is derived from it rather than fetched. That makes
+     * Play comparable with Steam without touching `histogram`, which stays the
+     * richer field for anyone who wants it.
+     */
+    common: buildCommon({
+      minimumOs: playMinimumOs(core),
+      reviewSummary: reviewSummaryFromHistogram(core.histogram),
+      // Google Play publishes neither a download size nor a language list on the
+      // listing, and Play has no publisher distinct from the developer.
+    }),
     extra: Object.keys(extra).length > 0 ? { play: extra } : {},
     coverage: completeCoverage('play', core as unknown as Record<string, unknown>, CANONICAL_FIELDS),
     derived: {},

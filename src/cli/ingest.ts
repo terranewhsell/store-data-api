@@ -24,6 +24,7 @@ import {
   discoverFromSteamMostPlayed,
 } from '../services/discovery.ts'
 import { ingestApp, renormalize } from '../services/ingest.ts'
+import { prefillSteamSpy } from '../services/steamspy-prefill.ts'
 import { drainQueue, promoteDiscoveries, queueStats, discoveryStats } from '../services/worker.ts'
 
 function arg(name: string, fallback?: string): string | undefined {
@@ -157,6 +158,14 @@ async function main(): Promise<void> {
       break
     }
 
+    case 'steamspy': {
+      // Bulk review counts: 1,000 games per request instead of one request per
+      // game. Run this BEFORE draining Steam, so the drain can skip appreviews.
+      const result = await prefillSteamSpy({ pages: intArg('pages', 3) })
+      logger.info('steamspy prefill finished', { ...result })
+      break
+    }
+
     case 'status':
       logger.info('queues', { ingest: await queueStats(), discovery: await discoveryStats() })
       break
@@ -171,6 +180,7 @@ async function main(): Promise<void> {
           '  promote      move discovered ids into the paced fetch queue',
           '  drain        fetch and store listings from the queue',
           '  app          fetch one listing now  (--source play --id com.example)',
+          '  steamspy     bulk pre-fill Steam review counts (1000 games per request)',
           '  renormalize  rebuild listings from stored raw payloads, no network',
           '  status       queue depths',
           '',

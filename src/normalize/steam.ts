@@ -26,6 +26,13 @@ import {
   type DerivedFields,
   type NormalizedApp,
 } from './contract.ts'
+import {
+  buildCommon,
+  reviewSummaryFromSteamSpy,
+  reviewSummaryFromValve,
+  steamLanguages,
+  steamMinimumOs,
+} from './common.ts'
 import { completeCoverage } from './coverage.ts'
 import {
   bool,
@@ -134,7 +141,15 @@ function contentRating(details: SteamAppDetails): string | null {
 export interface SteamNormalizeOptions {
   country: string
   lang: string
+  /** Valve's own review totals. Authoritative when present. */
   reviews?: SteamReviewSummary | null
+  /**
+   * SteamSpy's bulk figures. Used ONLY when Valve's are absent, because they lag
+   * and are third-party. Whichever ends up used is recorded in the summary's
+   * provenance, so the two are never indistinguishable.
+   */
+  steamSpy?: { positive: number | null; negative: number | null } | null
+  fetchedAt?: string | null
 }
 
 export function normalizeSteamApp(
@@ -243,6 +258,12 @@ export function normalizeSteamApp(
     pcRequirements: details.pc_requirements ?? null,
     recommendations: details.recommendations ?? null,
     priceOverview: details.price_overview ?? null,
+    /**
+     * SteamSpy's raw figures when they were used. Its `owners` estimate spans an
+     * order of magnitude and is NOT surfaced as an install count anywhere in the
+     * contract; it lives here, labelled, for whoever wants it with eyes open.
+     */
+    steamSpy: opts.steamSpy ?? null,
     // The real review numbers, untouched, next to the derived score.
     reviewSummary: reviews
       ? {
@@ -255,8 +276,38 @@ export function normalizeSteamApp(
       : null,
   }
 
+  /**
+   * Valve first, SteamSpy only as a fallback. Both are labelled; a consumer can
+   * always tell whether a number came from the store or from a third party that
+   * runs about nine percent behind it.
+   */
+  const reviewSummary =
+    (reviews ? reviewSummaryFromValve(
+      {
+        positive: reviews.totalPositive,
+        negative: reviews.totalNegative,
+        total: reviews.totalReviews,
+        label: reviews.reviewScoreDesc,
+      },
+      opts.fetchedAt ?? null,
+    ) : null) ??
+    (opts.steamSpy ? reviewSummaryFromSteamSpy(opts.steamSpy, opts.fetchedAt ?? null) : null)
+
   return {
     core,
+    /**
+     * Steam fills the OS requirement, the language list and the publisher, the
+     * last of which the mobile stores do not separate from the developer at all.
+     * The download size stays null: Steam states it only inside free-form
+     * requirements prose, and parsing a size out of publisher-written HTML would
+     * be a guess dressed as a number.
+     */
+    common: buildCommon({
+      minimumOs: steamMinimumOs(details as unknown as Record<string, unknown>),
+      supportedLanguages: steamLanguages(details.supported_languages),
+      publisher: Array.isArray(details.publishers) ? str(details.publishers[0]) : null,
+      reviewSummary,
+    }),
     extra: { steam: extra },
     coverage: completeCoverage('steam', core as unknown as Record<string, unknown>, CANONICAL_FIELDS),
     derived,

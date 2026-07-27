@@ -21,6 +21,7 @@ import {
   type CategoryRef,
   type NormalizedApp,
 } from './contract.ts'
+import { buildCommon, iosMinimumOs } from './common.ts'
 import { completeCoverage } from './coverage.ts'
 import { buildSearchText, num, scoreToText, str, strArray, toEpochMs } from './shared.ts'
 
@@ -136,8 +137,26 @@ export function normalizeIosApp(app: ItunesApp, opts: IosNormalizeOptions): Norm
     userRatingCountForCurrentVersion: num(app.userRatingCountForCurrentVersion),
   }
 
+  const sellerName = str(app.sellerName)
+  const artistName = str(app.artistName)
+
   return {
     core,
+    /**
+     * Apple fills three of the five common fields, including two that Google
+     * Play never publishes: the download size and the language list.
+     *
+     * `reviewSummary` stays null. Apple gives an average and a count but no
+     * positive/negative split, and there is no way to recover one from a mean.
+     */
+    common: buildCommon({
+      minimumOs: iosMinimumOs(str(app.minimumOsVersion)),
+      downloadSizeBytes: num(app.fileSizeBytes),
+      supportedLanguages: strArray(app.languageCodesISO2A),
+      // Only when it actually differs; on most listings Apple repeats the
+      // developer name and a duplicate would imply a distinction that is not there.
+      publisher: sellerName && sellerName !== artistName ? sellerName : null,
+    }),
     extra: { ios: extra },
     coverage: completeCoverage('ios', core as unknown as Record<string, unknown>, CANONICAL_FIELDS),
     derived: {},

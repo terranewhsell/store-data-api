@@ -27,6 +27,7 @@ import * as steam from '../sources/steam.ts'
 import type { SteamReviewSummary } from '../sources/steam.ts'
 import { matchPlayToIos } from './matcher.ts'
 import { checkQuality, richness } from './quality.ts'
+import { lookupSteamSpy } from './steamspy-prefill.ts'
 import {
   markDelisted,
   recordEvent,
@@ -340,18 +341,37 @@ export async function ingestSteamApp(
       payload: details,
     })
 
+    /**
+     * Review numbers, cheapest acceptable source first.
+     *
+     * Valve's `appreviews` is one request per game. When a fresh SteamSpy figure
+     * is already on hand from the bulk pre-fill, that request is skipped: it
+     * would spend a request to improve a number by roughly nine percent, which
+     * is not worth doubling the ingest cost of the whole catalogue.
+     *
+     * Whichever is used is recorded in the summary's provenance, so a consumer
+     * can always tell an approximate third-party count from the store's own.
+     */
+    const steamSpy = config.STEAMSPY_ENABLED ? await lookupSteamSpy(appId) : null
+
     let reviews: steam.SteamReviewSummary | null = null
-    try {
-      reviews = await steam.fetchReviewSummary(appId)
-      await storeRaw({ source: 'steam', kind: 'reviews', sourceId: appId, payload: reviews })
-    } catch (error) {
-      logger.debug('steam review summary unavailable', { appId, error: String(error) })
+    if (!steamSpy) {
+      try {
+        reviews = await steam.fetchReviewSummary(appId)
+        await storeRaw({ source: 'steam', kind: 'reviews', sourceId: appId, payload: reviews })
+      } catch (error) {
+        // A game with no reviews yet is a normal state and must not stop the
+        // listing from being stored.
+        logger.debug('steam review summary unavailable', { appId, error: String(error) })
+      }
     }
 
     const normalized = normalizeSteamApp(details, {
       country: opts.country,
       lang: opts.lang,
       reviews,
+      steamSpy: steamSpy ? { positive: steamSpy.positive, negative: steamSpy.negative } : null,
+      fetchedAt: steamSpy?.fetchedAt ?? new Date().toISOString(),
     })
     return await finish(normalized, {
       kind: 'app',
@@ -415,7 +435,24 @@ export async function renormalize(opts: {
    * combined, not just the piece that shares its name with the entity.
    */
   const steamReviews = new Map<string, SteamReviewSummary>()
+  const steamSpyNumbers = new Map<string, { positive: number | null; negative: number | null }>()
   if (opts.source === 'steam') {
+    const spyRows = await db
+      .select()
+      .from(rawPayloads)
+      .where(and(eq(rawPayloads.source, 'steam'), eq(rawPayloads.kind, 'steamspy')))
+      .orderBy(desc(rawPayloads.fetchedAt))
+      .limit(limit * 4)
+
+    for (const row of spyRows) {
+      if (!row.sourceId || steamSpyNumbers.has(row.sourceId)) continue
+      const payload = row.payload as { positive?: number | null; negative?: number | null }
+      steamSpyNumbers.set(row.sourceId, {
+        positive: payload.positive ?? null,
+        negative: payload.negative ?? null,
+      })
+    }
+
     const reviewRows = await db
       .select()
       .from(rawPayloads)
@@ -460,6 +497,7 @@ export async function renormalize(opts: {
             country,
             lang,
             reviews: steamReviews.get(steamAppId) ?? null,
+            steamSpy: steamSpyNumbers.get(steamAppId) ?? null,
           })
         }
 

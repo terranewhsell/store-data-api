@@ -290,6 +290,118 @@ export interface ExtraBlock {
   steam?: Record<string, unknown>
 }
 
+// ---------------------------------------------------------------------------
+// Cross-store equivalents
+// ---------------------------------------------------------------------------
+
+/**
+ * `common` exists because a null is not always honest.
+ *
+ * `androidVersion` is null for an App Store listing and that is CORRECT: an
+ * Android version requirement is not a thing an iOS app has, and writing iOS's
+ * `minimumOsVersion` into it would produce a field that says "Android 15.0",
+ * which is false. But the underlying question a consumer is asking, "what does
+ * this need to run", does have an answer on all three stores.
+ *
+ * So the canonical fields keep their platform-specific meaning and stay null
+ * where they do not apply, and `common` answers the platform-neutral question
+ * alongside them. Nothing is moved or renamed; this is additive.
+ *
+ * Every value here records which source field it came from, so a consumer can
+ * always trace it back rather than trusting a normalisation they cannot see.
+ */
+
+export type OsPlatform = 'android' | 'ios' | 'ipados' | 'windows' | 'macos' | 'linux'
+
+export interface MinimumOs {
+  platform: OsPlatform | null
+  /** Machine-comparable when the store gives one; null for "varies by device". */
+  version: string | null
+  /** What the store actually displays. */
+  text: string | null
+  /** The field this was read from, e.g. `minimumOsVersion`. */
+  sourceField: string
+}
+
+/**
+ * Positive/negative split, normalised across stores.
+ *
+ * Deliberately NOT the same thing as `histogram`. A histogram needs five real
+ * per-star buckets; only Google Play publishes those. A positive/negative split
+ * is a weaker but genuinely comparable signal that all three can produce, two of
+ * them directly and one by derivation. Where it is derived, `derivedFrom` says
+ * so, and `histogram` still stays null rather than being reconstructed.
+ */
+export interface ReviewSummary {
+  positive: number | null
+  negative: number | null
+  total: number | null
+  /** 0-100, one decimal. */
+  percentPositive: number | null
+  /** The store's own wording, e.g. "Very Positive". Null when it has none. */
+  label: string | null
+  /** Where the numbers came from, because not every provider is authoritative. */
+  provenance: {
+    provider: 'steam' | 'steamspy' | 'play' | 'ios'
+    authoritative: boolean
+    fetchedAt: string | null
+    /** Set when the numbers were computed rather than reported. */
+    derivedFrom?: string
+  }
+}
+
+/** One chart placement. */
+export interface RankingPosition {
+  source: Source
+  /** TOP_FREE | TOP_PAID | GROSSING | MOST_PLAYED */
+  collection: string
+  categoryId: string
+  country: string
+  lang: string
+  position: number
+  capturedAt: string
+}
+
+/**
+ * Platform-neutral answers to questions the canonical fields can only answer for
+ * one store each. Every field is null when genuinely unknown, never guessed.
+ */
+export interface CommonBlock {
+  /** What it needs to run. Android version, iOS version or desktop OS. */
+  minimumOs: MinimumOs | null
+  /** Download size in bytes. Apple publishes it; Google Play does not. */
+  downloadSizeBytes: number | null
+  /** ISO codes where the store publishes them. */
+  supportedLanguages: string[]
+  /** Distinct from `developer`: Steam separates them, the mobile stores rarely do. */
+  publisher: string | null
+  /** Positive/negative split, comparable across stores. */
+  reviewSummary: ReviewSummary | null
+  /**
+   * Every chart this app currently sits in. For App Store listings this is the
+   * closest thing to a popularity signal that exists, because Apple publishes no
+   * install counts anywhere.
+   *
+   * An app in no chart has an empty array. That is a real answer, not missing
+   * data: most apps are in no chart.
+   */
+  rankings: RankingPosition[]
+  /** The single best placement, for sorting and for a badge on a page. */
+  bestRank: RankingPosition | null
+}
+
+export function emptyCommon(): CommonBlock {
+  return {
+    minimumOs: null,
+    downloadSizeBytes: null,
+    supportedLanguages: [],
+    publisher: null,
+    reviewSummary: null,
+    rankings: [],
+    bestRank: null,
+  }
+}
+
 /**
  * What a route returns for one app: the canonical core at the top level, plus
  * `slug`, `extra` and `_meta` as siblings. Purely additive, so a consumer written
@@ -298,6 +410,8 @@ export interface ExtraBlock {
 export type AppResource = CanonicalApp & {
   /** Permanent URL segment. Generated once, never recomputed. */
   slug: string
+  /** Cross-store equivalents, so a platform-specific null is not a dead end. */
+  common: CommonBlock
   extra: ExtraBlock
   _meta: ResponseMeta
 }
@@ -307,6 +421,7 @@ export const SCHEMA_VERSION = '1.0.0'
 /** Normalized shape produced by every source adapter before it is stored. */
 export interface NormalizedApp {
   core: CanonicalApp
+  common: CommonBlock
   extra: ExtraBlock
   coverage: FieldCoverage
   derived: DerivedFields

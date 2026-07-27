@@ -36,6 +36,17 @@ type Matrix = Partial<Record<CanonicalField, CoverageReason>>
  * fragile than the library we deliberately chose not to replace.
  */
 const PLAY: Matrix = {
+  /**
+   * Always empty, by design rather than by accident.
+   *
+   * Individual reviews are a separate, paginated request per app on every store.
+   * Fetching them would multiply the ingest cost several times over for content
+   * that ages faster than anything else in the record. The field stays in the
+   * contract because the client's example had it, and it is declared here so the
+   * coverage report says "we do not fetch these" instead of showing a field that
+   * claims to be fillable and never is.
+   */
+  comments: 'not_available',
   editorsChoice: 'not_available',
   features: 'not_available',
   iosId: 'not_available',
@@ -62,6 +73,8 @@ const IOS: Matrix = {
   earlyAccessEnabled: 'not_applicable',
   adSupported: 'not_applicable',
   features: 'not_applicable',
+
+  comments: 'not_available', // see the note on PLAY.comments
 
   // On the page, not in the API.
   summary: 'not_available', // the App Store "subtitle"
@@ -107,6 +120,8 @@ const STEAM: Matrix = {
   developerInternalID: 'not_applicable',
   iosId: 'not_applicable',
   appId: 'not_applicable', // Steam has no Android package name; `appId` carries the Steam appid
+
+  comments: 'not_available', // see the note on PLAY.comments
 
   // Real per-star data does not exist. Not simulated. See extra.steam.
   histogram: 'not_available',

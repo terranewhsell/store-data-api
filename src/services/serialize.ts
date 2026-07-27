@@ -14,18 +14,23 @@
 import {
   CANONICAL_FIELDS,
   emptyCanonical,
+  emptyCommon,
   SCHEMA_VERSION,
   type AppResource,
   type CanonicalApp,
+  type CommonBlock,
   type DerivedFields,
   type ExtraBlock,
   type FieldCoverage,
+  type RankingPosition,
   type ResponseMeta,
   type Source,
 } from '../normalize/contract.ts'
+import { attachRankings } from '../normalize/common.ts'
 
 export interface LocaleRowLike {
   core: unknown
+  common?: unknown
   extra: unknown
   coverage: unknown
   country: string
@@ -48,6 +53,14 @@ export interface AppRowLike {
 export interface SerializeOptions {
   /** The market the caller asked for, when it differs from the one we served. */
   requestedMarket?: { country: string; lang: string }
+  /**
+   * Chart placements for this app, joined in by the caller.
+   *
+   * Not stored on the listing: a ranking belongs to the chart and changes on the
+   * chart's schedule, so baking it into the row would make every listing stale
+   * every time any chart refreshed.
+   */
+  rankings?: RankingPosition[]
   now?: Date
 }
 
@@ -137,9 +150,19 @@ export function serializeApp(
 
   const extra = (localeRow.extra ?? {}) as ExtraBlock
 
+  // Rows written before `common` existed deserialise to an empty block rather
+  // than a missing key, so the shape is stable across a schema change.
+  const storedCommon =
+    localeRow.common && typeof localeRow.common === 'object'
+      ? { ...emptyCommon(), ...(localeRow.common as Partial<CommonBlock>) }
+      : emptyCommon()
+
+  const common = attachRankings(storedCommon, opts.rankings ?? [])
+
   return {
     ...core,
     slug: appRow.slug,
+    common,
     extra,
     _meta: meta,
   }
@@ -164,6 +187,14 @@ export interface AppSummary {
   genreId: string | null
   type: string
   url: string | null
+  /**
+   * Best current chart placement, or null when the app is in no chart.
+   *
+   * Included in the compact form on purpose: for an App Store listing this is
+   * the only popularity signal that exists, because Apple publishes no install
+   * counts anywhere.
+   */
+  bestRank: RankingPosition | null
   _meta: Pick<ResponseMeta, 'source' | 'sourceId' | 'market' | 'fetchedAt' | 'ageSeconds' | 'status'>
 }
 
@@ -192,6 +223,8 @@ export function serializeSummary(
     genreId: core.genreId,
     type: core.type,
     url: core.url,
+    bestRank:
+      (opts.rankings ?? []).slice().sort((a, b) => a.position - b.position)[0] ?? null,
     _meta: {
       source: localeRow.source as Source,
       sourceId: localeRow.sourceId,

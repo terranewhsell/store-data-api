@@ -103,6 +103,13 @@ export const appLocales = pgTable(
     lang: text('lang').notNull(),
 
     core: jsonb('core').notNull(),
+    /**
+     * Cross-store equivalents. Stored rather than recomputed on read for the
+     * same reason `core` is: serving should be a read, not a rebuild.
+     * Ranking placements are the exception and are joined in at read time, since
+     * they belong to the chart and change on its schedule, not the listing's.
+     */
+    common: jsonb('common').notNull().default(sql`'{}'::jsonb`),
     extra: jsonb('extra').notNull().default(sql`'{}'::jsonb`),
     coverage: jsonb('coverage').notNull().default(sql`'{}'::jsonb`),
 

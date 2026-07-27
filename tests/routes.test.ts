@@ -475,6 +475,119 @@ describe('type derivation', () => {
   })
 })
 
+describe('cross-store equivalents on the wire', () => {
+  test('a listing carries the common block alongside the canonical fields', async () => {
+    const body = await json(await get('/v1/apps/google-translate'))
+    expect(body).toHaveProperty('common')
+    expect(Object.keys(body.common).sort()).toEqual([
+      'bestRank', 'downloadSizeBytes', 'minimumOs', 'publisher', 'rankings',
+      'reviewSummary', 'supportedLanguages',
+    ])
+  })
+
+  test('the canonical field stays platform-specific while common answers generally', async () => {
+    const ios = await json(await get('/v1/apps/ios/id414706506'))
+    // Apple listings have no Android version, and none is invented.
+    expect(ios.androidVersion).toBeNull()
+    // But the underlying question still has an answer.
+    expect(ios.common.minimumOs.platform).toBe('ios')
+    expect(ios.common.minimumOs.version).toBe('15.0')
+  })
+
+  test('Apple fills a size that Google Play never publishes', async () => {
+    const ios = await json(await get('/v1/apps/ios/id414706506'))
+    const play = await json(await get('/v1/apps/google-translate'))
+    expect(ios.common.downloadSizeBytes).toBe(123456789)
+    expect(play.common.downloadSizeBytes).toBeNull()
+  })
+
+  test('a Steam summary records that it came from Valve', async () => {
+    const body = await json(await get('/v1/steam/440'))
+    expect(body.common.reviewSummary.provenance.provider).toBe('steam')
+    expect(body.common.reviewSummary.provenance.authoritative).toBe(true)
+    expect(body.common.reviewSummary.percentPositive).toBe(90)
+    // Still not reconstructed into five buckets.
+    expect(body.histogram).toBeNull()
+  })
+})
+
+describe('ranking placements', () => {
+  test('an app in a chart reports its position and best placement', async () => {
+    const body = await json(await get('/v1/apps/google-translate'))
+    expect(body.common.rankings.length).toBeGreaterThan(0)
+
+    const top = body.common.rankings[0]
+    expect(top.collection).toBe('TOP_FREE')
+    expect(top.position).toBe(1)
+    expect(top.country).toBe('us')
+    expect(body.common.bestRank.position).toBe(1)
+  })
+
+  test('an app in no chart reports an empty list, not a missing key', async () => {
+    const body = await json(await get('/v1/apps/family-organiser'))
+    expect(body.common.rankings).toEqual([])
+    expect(body.common.bestRank).toBeNull()
+  })
+
+  test('list items carry the best placement too', async () => {
+    // For an App Store listing this is the only popularity signal that exists.
+    const body = await json(await get('/v1/apps?per_page=200'))
+    const translate = body.items.find((i: { slug: string }) => i.slug === 'google-translate')
+    expect(translate.bestRank.position).toBe(1)
+  })
+
+  test('a chart response labels each item with its own position', async () => {
+    const body = await json(await get('/v1/top?sort=TOP_FREE'))
+    expect(body.items[0].bestRank.position).toBe(1)
+    expect(body.items[1].bestRank.position).toBe(2)
+  })
+})
+
+describe('GET /v1/coverage', () => {
+  test('reports every canonical field for every source', async () => {
+    const body = await json(await get('/v1/coverage'))
+    expect(body.sources).toHaveLength(3)
+    for (const source of body.sources) {
+      expect(source.fields).toHaveLength(58)
+    }
+  })
+
+  test('separates what the store cannot give from what developers left blank', async () => {
+    const body = await json(await get('/v1/coverage?source=ios'))
+    const ios = body.sources[0]
+
+    const installs = ios.fields.find((f: { field: string }) => f.field === 'installs')
+    // A property of Apple, not of our integration.
+    expect(installs.declared).toBe('not_applicable')
+
+    const title = ios.fields.find((f: { field: string }) => f.field === 'title')
+    // A field the source can fill, and does.
+    expect(title.declared).toBeNull()
+    expect(title.fillRate).toBe(100)
+  })
+
+  test('explains what each source puts into the common block', async () => {
+    const body = await json(await get('/v1/coverage?source=steam'))
+    const steam = body.sources[0]
+    const summary = steam.common.find((c: { field: string }) => c.field === 'reviewSummary')
+    expect(summary.filledFrom).toContain('appreviews')
+    expect(summary.note).toContain('SteamSpy')
+  })
+
+  test('only=gaps returns just the empty fields and their reasons', async () => {
+    const body = await json(await get('/v1/coverage?source=play&only=gaps'))
+    const play = body.sources[0]
+    const gap = play.gaps.find((g: { field: string }) => g.field === 'editorsChoice')
+    expect(gap.reason).toBe('not_available')
+    // Fields the source fills are absent from this view.
+    expect(play.gaps.find((g: { field: string }) => g.field === 'title')).toBeUndefined()
+  })
+
+  test('is behind the token like everything else', async () => {
+    expect((await get('/v1/coverage', {})).status).toBe(401)
+  })
+})
+
 describe('reprocessing from stored raw payloads', () => {
   /**
    * Regression. Steam's review summary comes from a different endpoint and is

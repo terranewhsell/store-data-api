@@ -132,6 +132,7 @@ nothing beyond liveness.
 | `GET /v1/search?q=` | Search over the local index |
 | `GET /v1/top?sort=` | `TOP_FREE`, `TOP_PAID`, `GROSSING` |
 | `GET /v1/categories` | The 55 canonical categories, verbatim |
+| `GET /v1/coverage` | What each source covers, what it does not, and why |
 | `GET /v1/export/apps` | Bulk export with a keyset cursor |
 | `GET /v1/status` | Operational health, per source |
 | `GET /health` | Liveness, no token needed |
@@ -503,6 +504,44 @@ part of Google Play's taxonomy, so no ranking can be fetched for it.
 
 ---
 
+### `GET /v1/coverage`
+
+What each source can give, what it cannot, and why. This is the endpoint that
+stops an empty field from looking like a bug in the integration.
+
+```bash
+curl -s -H "$AUTH" "$API/v1/coverage?source=ios&only=gaps"
+```
+
+```json
+{
+  "sources": [{
+    "source": "ios",
+    "listings": 40,
+    "gaps": [
+      { "field": "installs", "reason": "not_applicable" },
+      { "field": "histogram", "reason": "not_available" }
+    ],
+    "common": [
+      { "field": "downloadSizeBytes", "filledFrom": "fileSizeBytes",
+        "note": "Apple publishes this; Google Play does not" }
+    ],
+    "notes": ["Chart position is the closest thing to a popularity signal for this source, because Apple publishes no install counts anywhere."]
+  }]
+}
+```
+
+Without `only=gaps` it reports all 58 fields per source with a **measured fill
+rate** across the stored listings. The two numbers answer different questions:
+
+- `declared: "not_applicable"` — the store has no such concept. A property of the
+  store, permanent.
+- `declared: "not_available"` — the concept exists but the official API does not
+  return it. Could be filled later, at a cost worth weighing.
+- `declared: null` with a low fill rate — the source *can* fill it and the
+  developers left it blank. Working correctly. On our sample, `video` sits at 19%
+  for Google Play because four listings in five have no promo video.
+
 ### `GET /v1/export/apps`
 
 ```bash
@@ -654,6 +693,94 @@ present" guarantee. Those fields are served as `null`.
 **Keys are never omitted.** Every one of the 58 canonical fields is present on
 every record from every source. That is what lets you type the payload once in
 Flutter or Astro instead of guarding each field.
+
+### `common`: cross-store equivalents
+
+A null is not always honest. `androidVersion` is null on an App Store listing and
+that is **correct** — writing Apple's `minimumOsVersion` into a field named
+`androidVersion` would assert something false. But the question underneath, "what
+does this need to run", has an answer on all three stores.
+
+So the canonical fields keep their platform-specific meaning and stay null where
+they do not apply, and `common` answers the same question in a platform-neutral
+shape, next to them. Every value records the field it came from.
+
+| Field | Play | App Store | Steam |
+|---|---|---|---|
+| `minimumOs` | `androidVersion` (null version on VARY) | `minimumOsVersion` | `platforms` + `pc_requirements` |
+| `downloadSizeBytes` | not published | `fileSizeBytes` | not published |
+| `supportedLanguages` | not published | `languageCodesISO2A` | `supported_languages` |
+| `publisher` | no separate publisher | `sellerName` when it differs | `publishers[0]` |
+| `reviewSummary` | derived from `histogram` | not derivable from a mean | `appreviews` or SteamSpy |
+| `rankings`, `bestRank` | chart positions | chart positions | chart positions |
+
+```jsonc
+"common": {
+  "minimumOs": { "platform": "windows", "version": "10", "text": "Windows® 10",
+                 "sourceField": "pc_requirements.minimum" },
+  "downloadSizeBytes": null,
+  "supportedLanguages": ["English", "French", "..."],
+  "publisher": "Valve",
+  "reviewSummary": {
+    "positive": 8387537, "negative": 1359781, "total": 9747318,
+    "percentPositive": 86, "label": "Very Positive",
+    "provenance": { "provider": "steam", "authoritative": true, "fetchedAt": "..." }
+  },
+  "rankings": [{ "collection": "TOP_FREE", "categoryId": "APPLICATION",
+                 "country": "us", "position": 1, "capturedAt": "..." }],
+  "bestRank": { "collection": "TOP_FREE", "position": 1 }
+}
+```
+
+**Ranking position matters most for the App Store.** Apple publishes no install
+counts anywhere, so a chart placement is the only popularity signal that exists
+for an iOS listing. It is in the compact list form too, not just the full record.
+An app in no chart gets `[]` and `null`, which is a real answer: most apps are in
+no chart.
+
+**`reviewSummary` is not a histogram.** A histogram needs five real per-star
+buckets and only Google Play publishes those. A positive/negative split is weaker
+but genuinely comparable, and all three can produce one — two directly, one by
+derivation. Where it is derived, `derivedFrom` says exactly how. `histogram` still
+stays null for Steam rather than being reconstructed.
+
+For Play the split excludes three-star ratings rather than forcing them onto a
+side, and says how many it excluded:
+
+```json
+"derivedFrom": "histogram: 4-5 stars counted positive, 1-2 negative, 375720 three-star ratings excluded as neutral"
+```
+
+**`provenance` exists because not every provider is the store.** Steam review
+counts come from Valve when we have them and from SteamSpy in bulk otherwise;
+`authoritative` tells you which. See below.
+
+### SteamSpy: cost versus accuracy, stated plainly
+
+Valve's `appreviews` is one request per game. Three thousand Steam titles is three
+thousand requests for a number that moves slowly. SteamSpy's bulk export returns
+1,000 games per request with the counts already in it.
+
+Measured 2026-07-27 on Counter-Strike 2:
+
+| | Positive | Negative | Ratio |
+|---|---|---|---|
+| SteamSpy | 7,642,084 | 1,173,003 | 86.7% |
+| Valve | 8,387,623 | 1,359,828 | 86.0% |
+
+About 9% low on absolute counts, within 0.7 points on the ratio. So SteamSpy
+pre-fills and Valve overrides, every summary is labelled with which one produced
+it, and `authoritative: false` travels with the approximation.
+
+```bash
+bun run ingest steamspy --pages 3   # top 3,000 games by owners, 3 requests
+```
+
+Disable with `STEAMSPY_ENABLED=false` to always use Valve, at one request per game.
+
+SteamSpy's `owners` estimate spans an order of magnitude ("100,000,000 ..
+200,000,000") and is **not** surfaced as an install count anywhere in the
+contract. It sits in `extra.steam.steamSpy`, labelled.
 
 ### `fieldCoverage`: why a null is null
 

@@ -107,6 +107,7 @@ export async function searchLocal(params: SearchParams): Promise<{ items: AppSum
       iosMatchConfidence: apps.iosMatchConfidence,
       iosMatchMethod: apps.iosMatchMethod,
       core: appLocales.core,
+      common: appLocales.common,
       extra: appLocales.extra,
       coverage: appLocales.coverage,
       country: appLocales.country,
@@ -140,6 +141,7 @@ export async function searchLocal(params: SearchParams): Promise<{ items: AppSum
       },
       {
         core: row.core,
+        common: row.common,
         extra: row.extra,
         coverage: row.coverage,
         country: row.country as string,

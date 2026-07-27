@@ -22,7 +22,66 @@ import {
   type AppSummary,
   type LocaleRowLike,
 } from './serialize.ts'
-import type { AppResource } from '../normalize/contract.ts'
+import type { AppResource, RankingPosition } from '../normalize/contract.ts'
+
+/**
+ * Chart placements for a batch of apps, in one query.
+ *
+ * Batched rather than per-app because a 50-item page would otherwise fire 50
+ * extra queries, and the whole reason the ranking tables exist is that these
+ * pages carry the traffic.
+ *
+ * The key is `source:sourceId`, matching how rankings are stored: a chart lists
+ * native store ids, not our internal ones.
+ */
+export async function rankingPositionsFor(
+  entries: { source: string; sourceId: string }[],
+  market: { country: string; lang: string },
+): Promise<Map<string, RankingPosition[]>> {
+  const out = new Map<string, RankingPosition[]>()
+  if (entries.length === 0) return out
+
+  const db = getDb()
+  const sourceIds = [...new Set(entries.map((e) => e.sourceId))]
+
+  const rows = await db
+    .select({
+      source: rankingSnapshots.source,
+      collection: rankingSnapshots.collection,
+      categoryId: rankingSnapshots.categoryId,
+      country: rankingSnapshots.country,
+      lang: rankingSnapshots.lang,
+      capturedAt: rankingSnapshots.capturedAt,
+      position: rankingItems.position,
+      sourceId: rankingItems.sourceId,
+    })
+    .from(rankingItems)
+    .innerJoin(rankingSnapshots, eq(rankingItems.snapshotId, rankingSnapshots.id))
+    .where(
+      and(
+        inArray(rankingItems.sourceId, sourceIds),
+        eq(rankingSnapshots.country, market.country),
+        eq(rankingSnapshots.lang, market.lang),
+      ),
+    )
+
+  for (const row of rows) {
+    const key = `${row.source}:${row.sourceId}`
+    const list = out.get(key) ?? []
+    list.push({
+      source: row.source as RankingPosition['source'],
+      collection: row.collection,
+      categoryId: row.categoryId,
+      country: row.country,
+      lang: row.lang,
+      position: row.position,
+      capturedAt: row.capturedAt.toISOString(),
+    })
+    out.set(key, list)
+  }
+
+  return out
+}
 
 const SELECTION = {
   slug: apps.slug,
@@ -32,6 +91,7 @@ const SELECTION = {
   iosMatchConfidence: apps.iosMatchConfidence,
   iosMatchMethod: apps.iosMatchMethod,
   core: appLocales.core,
+  common: appLocales.common,
   extra: appLocales.extra,
   coverage: appLocales.coverage,
   country: appLocales.country,
@@ -59,6 +119,7 @@ function split(row: Record<string, unknown>): { app: AppRowLike; locale: LocaleR
     },
     locale: {
       core: row.core,
+      common: row.common,
       extra: row.extra,
       coverage: row.coverage,
       country: row.country as string,
@@ -171,9 +232,18 @@ export async function listApps(
     .limit(page.limit)
     .offset(page.offset)
 
-  const items = (rows as unknown as Record<string, unknown>[]).map((row) => {
+  const list = rows as unknown as Record<string, unknown>[]
+  const positions = await rankingPositionsFor(
+    list.map((row) => ({ source: row.source as string, sourceId: row.sourceId as string })),
+    market,
+  )
+
+  const items = list.map((row) => {
     const { app, locale } = split(row)
-    return serializeSummary(app, locale, { requestedMarket: requested })
+    return serializeSummary(app, locale, {
+      requestedMarket: requested,
+      rankings: positions.get(`${locale.source}:${locale.sourceId}`) ?? [],
+    })
   })
 
   return { items, total, servedMarket: market, marketFallback: fallback }
@@ -204,7 +274,14 @@ export async function getApp(
   const found = (exact as unknown as Record<string, unknown>[])[0]
   if (found) {
     const { app, locale } = split(found)
-    return serializeApp(app, locale, { requestedMarket: market })
+    const positions = await rankingPositionsFor(
+      [{ source: locale.source, sourceId: locale.sourceId }],
+      market,
+    )
+    return serializeApp(app, locale, {
+      requestedMarket: market,
+      rankings: positions.get(`${locale.source}:${locale.sourceId}`) ?? [],
+    })
   }
 
   // Market not warmed for this app: answer from whatever market we do have,
@@ -221,7 +298,14 @@ export async function getApp(
   if (!fallbackRow) return null
 
   const { app, locale } = split(fallbackRow)
-  return serializeApp(app, locale, { requestedMarket: market })
+  const positions = await rankingPositionsFor(
+    [{ source: locale.source, sourceId: locale.sourceId }],
+    { country: locale.country, lang: locale.lang },
+  )
+  return serializeApp(app, locale, {
+    requestedMarket: market,
+    rankings: positions.get(`${locale.source}:${locale.sourceId}`) ?? [],
+  })
 }
 
 export interface RankingResult {
@@ -297,6 +381,18 @@ export async function getRanking(params: {
     const { app, locale } = split(row)
     return serializeSummary(app, locale, {
       requestedMarket: { country: params.country, lang: params.lang },
+      // The placement is right here in the join; no second query needed.
+      rankings: [
+        {
+          source: params.source,
+          collection: params.collection,
+          categoryId: params.categoryId,
+          country: params.country,
+          lang: params.lang,
+          position: row.position as number,
+          capturedAt: snapshot.capturedAt.toISOString(),
+        },
+      ],
     })
   })
 
@@ -379,10 +475,16 @@ export async function exportApps(params: {
   const hasMore = list.length > params.limit
   const page = hasMore ? list.slice(0, params.limit) : list
 
+  const positions = await rankingPositionsFor(
+    page.map((row) => ({ source: row.source as string, sourceId: row.sourceId as string })),
+    { country: params.country, lang: params.lang },
+  )
+
   const items = page.map((row) => {
     const { app, locale } = split(row)
     return serializeApp(app, locale, {
       requestedMarket: { country: params.country, lang: params.lang },
+      rankings: positions.get(`${locale.source}:${locale.sourceId}`) ?? [],
     })
   })
 

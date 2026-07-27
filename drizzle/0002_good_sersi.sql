@@ -1,0 +1,1 @@
+ALTER TABLE "app_locales" ADD COLUMN "common" jsonb DEFAULT '{}'::jsonb NOT NULL;

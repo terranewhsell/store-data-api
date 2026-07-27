@@ -13,6 +13,7 @@ import { ApiError, internal, notFound } from './lib/errors.ts'
 import { logger } from './lib/logger.ts'
 import { appsRoutes } from './routes/v1/apps.ts'
 import { categoriesRoutes } from './routes/v1/categories.ts'
+import { coverageRoutes } from './routes/v1/coverage.ts'
 import { exportRoutes } from './routes/v1/export.ts'
 import { searchRoutes } from './routes/v1/search.ts'
 import { statusRoutes } from './routes/v1/status.ts'
@@ -40,6 +41,7 @@ export function createApp(): Hono {
   const v1 = new Hono()
   v1.use('*', requireBearer)
   v1.route('/', categoriesRoutes)
+  v1.route('/', coverageRoutes)
   v1.route('/', appsRoutes)
   v1.route('/', steamRoutes)
   v1.route('/', searchRoutes)
