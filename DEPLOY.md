@@ -32,9 +32,23 @@ project after a week of no traffic is exactly wrong for a demo that sits idle
 between the day you send the link and the day the client opens it. Neon just
 sleeps and wakes on the next query.
 
-Sizing: measured on this project, a listing costs about **25 KB** including its
-raw payload. 0.5 GB therefore holds roughly **20,000 apps**, so the free tier is
-not the constraint for a demo.
+Sizing, measured on this project:
+
+| What | Per app | 20,000 apps |
+|---|---|---|
+| Listing, plus its raw API payload | ~25 KB | ~500 MB |
+| Google Play page HTML, sampled 1 in 100 | ~3.4 KB amortised | ~69 MB |
+
+So about **570 MB for 20,000 apps**, which is over a 0.5 GB free tier. For a
+demo, seed 10,000-15,000 and it fits comfortably; for a full catalogue, budget a
+paid tier or raise `PLAY_HTML_SAMPLE_RATE`.
+
+The page HTML deserves the note. A Play page is 1.3 MB, 338 KB once Postgres
+compresses it, and an earlier version of this service stored every one of them:
+6.5 GB at twenty thousand apps, filling a free tier at around fifteen hundred.
+It is now sampled and each app keeps only its most recent page, so the corpus is
+a fixed cost. `PLAY_STORE_HTML=false` removes it entirely, at the price of
+needing to re-fetch from Google the day a parser has to be rebuilt.
 
 ### API hosting
 

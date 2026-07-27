@@ -35,9 +35,23 @@ import {
   setIosMatch,
   storeLocale,
   storeRaw,
+  storeRawReplacing,
   upsertApp,
   type AppRecord,
 } from './repository.ts'
+
+/**
+ * Whether this app is one of the ones whose page we keep.
+ *
+ * Hashed rather than random so the corpus is the SAME set of apps on every run.
+ * A random sample would drift: each refresh would keep different pages, the
+ * total would creep up, and no app would reliably have a page to reprocess.
+ */
+function shouldSampleHtml(appId: string): boolean {
+  const rate = config.PLAY_HTML_SAMPLE_RATE
+  if (rate <= 1) return true
+  return Number(BigInt(Bun.hash(appId).toString()) % BigInt(rate)) === 0
+}
 
 export interface IngestOutcome {
   ok: boolean
@@ -186,16 +200,19 @@ export async function ingestPlayApp(
     })
 
     /**
-     * The page itself, when our own parser ran.
+     * The page itself, for a sample of apps.
      *
      * The payload above is a PARSED object, so reprocessing it can only re-run
-     * our normalizer: it can never correct a parser-level mistake. The other two
-     * sources store real API responses, so "reprocess without re-fetching" held
-     * for them and quietly did not for Play. Storing the HTML closes that, and
-     * it is also the corpus a future parser gets validated against.
+     * our normalizer: it can never correct a parser-level mistake. Keeping the
+     * page is what makes a future parser buildable without asking Google again.
+     *
+     * A sample, not all of them, because a page costs 338 KB stored and keeping
+     * every one is 6.5 GB at twenty thousand apps. And replacing rather than
+     * appending, because otherwise a daily refresh multiplies that by 365. See
+     * PLAY_HTML_SAMPLE_RATE.
      */
-    if (fetched.html && config.PLAY_STORE_HTML) {
-      await storeRaw({
+    if (fetched.html && config.PLAY_STORE_HTML && shouldSampleHtml(appId)) {
+      await storeRawReplacing({
         source: 'play',
         kind: 'app_html',
         sourceId: appId,

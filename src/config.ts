@@ -86,12 +86,33 @@ const schema = z.object({
   /**
    * Keep the page HTML alongside the parsed result.
    *
-   * Until now Play stored the library's OUTPUT as its raw payload, which meant
-   * reprocessing could only re-run our normalizer and could never fix a
-   * parser-level mistake. The other two sources stored real API responses, so
-   * the promise held for them and quietly did not for Play.
+   * Play used to store the PARSED object as its raw payload, so reprocessing
+   * could re-run our normalizer but never correct a parser-level mistake. The
+   * other two sources store real API responses, so the promise held for them and
+   * quietly did not for Play. Keeping the page closes that.
    */
   PLAY_STORE_HTML: bool(true),
+
+  /**
+   * Store the page for one app in every N.
+   *
+   * A Play page is about 1.3 MB, and 338 KB once Postgres has compressed it.
+   * Keeping every one costs 6.5 GB at twenty thousand apps, which fills a 0.5 GB
+   * free-tier database at roughly fifteen hundred. Measured, after the first
+   * version of this stored all of them and the sizing in DEPLOY.md silently
+   * became wrong by a factor of thirteen.
+   *
+   * A corpus does not need every page. It needs enough pages, of enough
+   * different apps, to write and validate a parser against. At the default rate
+   * that is around two hundred pages for a twenty thousand app catalogue, about
+   * 68 MB, and it is a fixed cost rather than a growing one because each app
+   * keeps only its most recent page.
+   *
+   * Sampling is by a hash of the app id, so the same apps are always the ones
+   * kept: the corpus is stable across runs instead of drifting with whatever was
+   * ingested last. Set to 1 to keep everything.
+   */
+  PLAY_HTML_SAMPLE_RATE: int(100),
 
 
   // Backoff on failure.

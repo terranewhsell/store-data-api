@@ -319,6 +319,39 @@ export async function storeRaw(input: {
   })
 }
 
+/**
+ * Stores a payload, replacing any previous one for the same key.
+ *
+ * `raw_payloads` is append-only everywhere else, and deliberately so: the
+ * history is what lets a bad normalisation be traced. Page HTML is the
+ * exception, because at 338 KB a copy an append-only history of it grows without
+ * bound. Only the most recent page for an app and market is worth keeping, and
+ * that keeps the corpus a fixed cost rather than one that grows with every
+ * refresh.
+ */
+export async function storeRawReplacing(input: {
+  source: Source
+  kind: string
+  sourceId: string
+  country?: string | null
+  lang?: string | null
+  url?: string | null
+  payload: unknown
+}): Promise<void> {
+  const db = getDb()
+
+  const conditions = [
+    eq(rawPayloads.source, input.source),
+    eq(rawPayloads.kind, input.kind),
+    eq(rawPayloads.sourceId, input.sourceId),
+  ]
+  if (input.country) conditions.push(eq(rawPayloads.country, input.country))
+  if (input.lang) conditions.push(eq(rawPayloads.lang, input.lang))
+
+  await db.delete(rawPayloads).where(and(...conditions))
+  await storeRaw(input)
+}
+
 export async function recordEvent(input: {
   source: Source
   kind: string

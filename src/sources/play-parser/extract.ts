@@ -186,11 +186,24 @@ export const FIELD_SPECS: Record<string, FieldSpec> = {
   minInstalls: { path: [D, 1, 2, 13, 1] },
   maxInstalls: { path: [D, 1, 2, 13, 2] },
 
+  /**
+   * Score comes from the payload, not the spine, and this is the one field where
+   * that order is deliberate.
+   *
+   * Both carry the same number. The payload has it as Google publishes it,
+   * `4.7284575`; the JSON-LD carries the underlying float, `4.728457450866699`.
+   * Fifteen decimal places on a star rating is not extra accuracy, it is noise:
+   * the client's own example shows `4.482483`, and a consumer diffing our output
+   * against theirs would see a field that looks wrong for no reason.
+   *
+   * So the payload wins when present, and the structured value is rounded to the
+   * same precision when it has to stand in. The drift check still compares them.
+   */
   score: {
-    structured: (sd) => sd.ratingValue,
+    structured: (sd) =>
+      sd.ratingValue === null ? null : Number(sd.ratingValue.toPrecision(8)),
     path: [D, 1, 2, 51, 0, 1],
-    // The spine rounds differently from the payload; agreement to two decimals
-    // is what matters, and that is checked in `reconcile`.
+    preferStructured: false,
     skipDriftCheck: true,
   },
   scoreText: { path: [D, 1, 2, 51, 0, 0] },
