@@ -147,10 +147,34 @@ export type Config = z.infer<typeof schema> & {
   pgliteDir: string
 }
 
+/**
+ * What to do about each setting that can stop the service starting.
+ *
+ * A schema message like "Too small: expected string to have >=1 characters" is
+ * accurate and useless: it names the constraint, not the fix. Someone following
+ * the README and hitting this has no reason to know what a valid value looks
+ * like, so the error says.
+ */
+const REMEDIES: Record<string, string> = {
+  DATABASE_URL:
+    'Set DATABASE_URL in .env. For a local Postgres started with the README command:\n' +
+    '      postgres://storedata:storedata@localhost:55432/storedata\n' +
+    '    Or use the embedded database, which needs no server:\n' +
+    '      pglite://./data/pgdata',
+  API_BEARER_TOKEN:
+    'Set API_BEARER_TOKEN in .env. Generate one with: openssl rand -hex 32',
+}
+
 function build(env: Record<string, string | undefined>): Config {
   const parsed = schema.safeParse(env)
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n')
+    const issues = parsed.error.issues
+      .map((i) => {
+        const key = String(i.path[0] ?? '')
+        const remedy = REMEDIES[key]
+        return `  ${i.path.join('.')}: ${i.message}` + (remedy ? `\n    ${remedy}` : '')
+      })
+      .join('\n')
     throw new Error(`Invalid environment configuration:\n${issues}`)
   }
   const cfg = parsed.data
