@@ -91,6 +91,39 @@ function histogramFrom(value: unknown): Record<string, number> | null {
   return Object.keys(out).length === 5 ? out : null
 }
 
+/**
+ * Categories, gathered by walking the nesting rather than assuming its depth.
+ *
+ * Google groups them irregularly: `[118]` holds groups of groups of entries, and
+ * the nesting is not the same for every listing. Each actual entry is an array
+ * whose first element is the display name and whose third is the id:
+ *
+ *   ["Strategy",      <link>, "GAME_STRATEGY", "/m/03hf_rm"]
+ *   ["Build & battle", <link>, null,           "/genome/00144"]
+ *
+ * That second one is why `id` is nullable in the contract, and why the client's
+ * own example includes an entry with a null id. Reading a fixed depth would find
+ * one listing's categories and miss another's.
+ */
+function collectCategories(
+  value: unknown,
+  out: { name: string | null; id: string | null }[] = [],
+): { name: string | null; id: string | null }[] {
+  if (!Array.isArray(value) || value.length === 0) return out
+
+  // An entry, rather than another level of grouping.
+  if (value.length >= 4 && typeof value[0] === 'string') {
+    out.push({
+      name: value[0],
+      id: typeof value[2] === 'string' ? value[2] : null,
+    })
+    return out
+  }
+
+  for (const child of value) collectCategories(child, out)
+  return out
+}
+
 // ---------------------------------------------------------------------------
 // Field specifications
 // ---------------------------------------------------------------------------
@@ -318,18 +351,7 @@ export const FIELD_SPECS: Record<string, FieldSpec> = {
    */
   categories: {
     path: [D, 1, 2, 118],
-    transform: (v) => {
-      if (!Array.isArray(v)) return []
-      const list = Array.isArray(v[0]) ? (v[0] as unknown[]) : []
-      const out: { name: string | null; id: string | null }[] = []
-      for (const entry of list) {
-        if (!Array.isArray(entry)) continue
-        const name = typeof entry[0] === 'string' ? entry[0] : null
-        const id = typeof entry[2] === 'string' ? entry[2] : null
-        if (name !== null || id !== null) out.push({ name, id })
-      }
-      return out
-    },
+    transform: (v) => collectCategories(v),
   },
 }
 

@@ -17,7 +17,10 @@ import { config } from '../config.ts'
 import { pacers } from '../lib/pacer.ts'
 import { SourceError } from '../lib/source-errors.ts'
 import { logger } from '../lib/logger.ts'
+import { PLAY_INGESTABLE_CATEGORY_IDS } from '../data/categories.ts'
 import * as ownParser from './play-parser/index.ts'
+import * as ownPages from './play-parser/pages.ts'
+import { fetchChart } from './play-parser/charts.ts'
 import type { ExtractionReport as OwnExtractionReport } from './play-parser/index.ts'
 
 /**
@@ -215,14 +218,54 @@ export async function fetchApp(params: PlayAppParams): Promise<PlayRawApp> {
  * PLAY_INGESTABLE_CATEGORY_IDS, and this guard is the second line of defence.
  */
 export async function fetchList(params: PlayListParams): Promise<Record<string, unknown>[]> {
-  const validCategories = Object.values(gplay.category) as string[]
-  if (!validCategories.includes(params.category)) {
+  // Validated against OUR canonical list, not the library's constants. The two
+  // agree, and a test asserts they still do, but the runtime path must not
+  // depend on a third party to know which categories exist.
+  if (!PLAY_INGESTABLE_CATEGORY_IDS.includes(params.category)) {
     throw new SourceError(
       'play',
       'not_found',
       `Category ${params.category} does not exist in Google Play's taxonomy.`,
       { detail: { category: params.category } },
     )
+  }
+
+  /**
+   * Charts are the one Play operation still not fully ours.
+   *
+   * Everything else on this store now runs on our own parser: the listing, the
+   * search, the developer catalogue and the similar-apps strip all come from
+   * ordinary HTML pages we fetch and parse. Charts do not. Play loads them
+   * through `batchexecute`, its internal RPC, and getting that call accepted
+   * needs more than the right payload: our implementation in
+   * `play-parser/charts.ts` sends a byte-identical body to a working one and
+   * still gets an empty stream back, because the library's HTTP client carries a
+   * cookie jar and a set of defaults we have not matched. The request shape,
+   * the query parameters, the field mask and the response reader are all
+   * written and tested; the transport is what is missing.
+   *
+   * So ours is attempted first and the library catches the fall. The day the
+   * transport is solved, this starts using ours with no other change. Until
+   * then the charts keep working, which matters more than the purity of the
+   * dependency graph, and the log says plainly which one served the request.
+   */
+  if (config.PLAY_PARSER === 'own') {
+    try {
+      const apps = await fetchChart({
+        collection: params.collection,
+        category: params.category,
+        num: params.num,
+        lang: params.lang,
+        country: params.country,
+      })
+      return apps as unknown as Record<string, unknown>[]
+    } catch (error) {
+      logger.warn('own chart parser failed, falling back to the library', {
+        collection: params.collection,
+        category: params.category,
+        error: error instanceof Error ? error.message.slice(0, 160) : String(error),
+      })
+    }
   }
 
   const raw = await paced(
@@ -281,6 +324,15 @@ export async function fetchList(params: PlayListParams): Promise<Record<string, 
  * possible way to lose the IP.
  */
 export async function fetchSearch(params: PlaySearchParams): Promise<Record<string, unknown>[]> {
+  if (config.PLAY_PARSER === 'own') {
+    const apps = await ownPages.search(params.term, {
+      lang: params.lang,
+      country: params.country,
+      num: params.num,
+    })
+    return apps as unknown as Record<string, unknown>[]
+  }
+
   const raw = await paced(
     () =>
       gplay.search({
@@ -301,6 +353,14 @@ export async function fetchSearch(params: PlaySearchParams): Promise<Record<stri
  * corpus expands from the seeds without depending on any external list.
  */
 export async function fetchSimilar(params: PlayAppParams): Promise<Record<string, unknown>[]> {
+  if (config.PLAY_PARSER === 'own') {
+    const apps = await ownPages.similarApps(params.appId, {
+      lang: params.lang,
+      country: params.country,
+    })
+    return apps as unknown as Record<string, unknown>[]
+  }
+
   const raw = await paced(
     () =>
       gplay.similar({
@@ -321,6 +381,15 @@ export async function fetchDeveloperApps(params: {
   country: string
   num?: number
 }): Promise<Record<string, unknown>[]> {
+  if (config.PLAY_PARSER === 'own') {
+    const apps = await ownPages.developerApps(params.devId, {
+      lang: params.lang,
+      country: params.country,
+      ...(params.num !== undefined ? { num: params.num } : {}),
+    })
+    return apps as unknown as Record<string, unknown>[]
+  }
+
   const raw = await paced(
     () =>
       gplay.developer({

@@ -12,6 +12,8 @@ import { parseStructuredData } from '../src/sources/play-parser/structured.ts'
 import { extractFields, extractionIsSound } from '../src/sources/play-parser/extract.ts'
 import { parsePlayHtml, buildUrl } from '../src/sources/play-parser/index.ts'
 import { isSourceError } from '../src/lib/source-errors.ts'
+import { parseAppListHtml } from '../src/sources/play-parser/lists.ts'
+import { parseBatchExecute } from '../src/sources/play-parser/charts.ts'
 
 const PARAMS = { appId: 'com.example.app', lang: 'en', country: 'us' }
 
@@ -318,5 +320,98 @@ describe('output shape', () => {
     expect(buildUrl(PARAMS)).toBe(
       'https://play.google.com/store/apps/details?id=com.example.app&hl=en&gl=us',
     )
+  })
+})
+
+describe('app lists: search, developer, similar, category', () => {
+  /** One entry in the shape Play uses on every list page. */
+  function listPage(entries: { appId: string; title: string; score?: number }[]): string {
+    const data = entries.map((e) => [
+      [e.appId],
+      [[null, null, null, [null, null, `https://play-lh.googleusercontent.com/${e.appId}`]]],
+      null,
+      e.title,
+      [e.score ?? 4.25],
+    ])
+    return `<html><body><script>AF_initDataCallback({key: 'ds:4', hash: '1', data: ${JSON.stringify([data])}, sideChannel: {}});</script></body></html>`
+  }
+
+  test('finds apps by their package id rather than by position', () => {
+    // The same page puts its clusters at different depths depending on how many
+    // there are, so a fixed coordinate finds one page's results and misses
+    // another's. A package id is unmistakable wherever it sits.
+    const apps = parseAppListHtml(
+      listPage([
+        { appId: 'com.example.one', title: 'One' },
+        { appId: 'com.example.two', title: 'Two', score: 4.8 },
+      ]),
+      { lang: 'en', country: 'us' },
+    )
+
+    expect(apps).toHaveLength(2)
+    expect(apps[0]?.title).toBe('One')
+    expect(apps[1]?.score).toBe(4.8)
+    expect(apps[1]?.scoreText).toBe('4.8')
+  })
+
+  test('builds a usable url for every entry', () => {
+    const apps = parseAppListHtml(listPage([{ appId: 'com.example.one', title: 'One' }]), {
+      lang: 'es',
+      country: 'es',
+    })
+    expect(apps[0]?.url).toBe(
+      'https://play.google.com/store/apps/details?id=com.example.one&hl=es&gl=es',
+    )
+  })
+
+  test('deduplicates apps repeated across clusters', () => {
+    // Category pages show the same app in several strips; a caller asking for
+    // the apps on a page wants each one once.
+    const apps = parseAppListHtml(
+      listPage([
+        { appId: 'com.example.one', title: 'One' },
+        { appId: 'com.example.one', title: 'One again' },
+      ]),
+      { lang: 'en', country: 'us' },
+    )
+    expect(apps).toHaveLength(1)
+  })
+
+  test('ignores strings that merely look dotted', () => {
+    const apps = parseAppListHtml(listPage([{ appId: 'not.a', title: 'Too short' }]), {
+      lang: 'en',
+      country: 'us',
+    })
+    expect(apps).toHaveLength(0)
+  })
+
+  test('respects the limit', () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({
+      appId: `com.example.app${i}`,
+      title: `App ${i}`,
+    }))
+    expect(parseAppListHtml(listPage(many), { lang: 'en', country: 'us', limit: 5 })).toHaveLength(5)
+  })
+})
+
+describe('chart RPC wire format', () => {
+  test('reads a batchexecute response and ignores other RPCs', () => {
+    const payload = JSON.stringify([[['com.example.app'], null, null, 'Example']])
+    const body = `)]}'\n\n123\n${JSON.stringify([
+      ['wrb.fr', 'otherRpc', '[]', null, null, null, 'generic'],
+      ['wrb.fr', 'vyAe2', payload, null, null, null, 'generic'],
+    ])}\n`
+
+    expect(parseBatchExecute(body, 'vyAe2')).toEqual([[['com.example.app'], null, null, 'Example']])
+  })
+
+  test('returns null when our RPC is absent rather than guessing', () => {
+    const body = `)]}'\n\n25\n${JSON.stringify([['wrb.fr', 'somethingElse', '[]', null, null, null, 'generic']])}\n`
+    expect(parseBatchExecute(body, 'vyAe2')).toBeNull()
+  })
+
+  test('survives a body that is not the expected stream at all', () => {
+    expect(parseBatchExecute('', 'vyAe2')).toBeNull()
+    expect(parseBatchExecute('<html>blocked</html>', 'vyAe2')).toBeNull()
   })
 })

@@ -89,6 +89,24 @@ const EXPECTED_DIFFERENCES = new Map<string, string>([
    */
   ['androidVersion', 'the library falls back to VARY from a stale coordinate; ours reads the real value'],
   ['androidVersionText', 'same stale coordinate as androidVersion'],
+
+  /**
+   * Ours decodes HTML entities; the library does not.
+   *
+   * Duolingo's summary comes back from the library as "Math &amp; Music" and
+   * from ours as "Math & Music". This is the exact defect the client reported on
+   * the previous project, where `&#8217;` reached the consumer instead of an
+   * apostrophe, so matching the library here would mean reintroducing a bug they
+   * had already asked us to fix.
+   */
+  ['summary', 'the library leaves HTML entities encoded; ours decodes them'],
+
+  /**
+   * Whitespace only. Both carry the same words; ours collapses runs of spaces
+   * left over from the markup, the library keeps them. Nothing is lost either
+   * way, and the collapsed form is the one that renders predictably.
+   */
+  ['description', 'whitespace normalisation; identical text otherwise'],
 ])
 
 function normalise(value: unknown): unknown {

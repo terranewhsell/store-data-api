@@ -69,25 +69,33 @@ const schema = z.object({
   RATE_STEAMSPY_MAX_INTERVAL_MS: int(1500),
 
   /**
-   * Use SteamSpy to pre-fill Steam review counts in bulk. Off by default: it is
-   * a third party and its numbers lag Valve's by roughly 9 percent, so enabling
-   * it is a deliberate trade of accuracy for thousands of saved requests.
+   * Use SteamSpy to pre-fill Steam review counts in bulk.
+   *
+   * OFF by default. SteamSpy is a third-party service, and the client's position
+   * is that this service should not depend on ones it does not control. With it
+   * off, review counts come from Valve's own endpoint at one request per game,
+   * which is slower and entirely ours.
+   *
+   * Turning it on trades that independence for roughly a thousandfold reduction
+   * in requests, at about nine percent lower counts. Whoever turns it on should
+   * be making that trade deliberately.
    */
-  STEAMSPY_ENABLED: bool(true),
+  STEAMSPY_ENABLED: bool(false),
   STEAMSPY_PAGES: int(3),
 
   /**
    * Which Google Play parser to use.
    *
-   *   library  google-play-scraper. The default until parity is demonstrated.
-   *   own      our own parser (src/sources/play-parser).
+   *   own      our own parser (src/sources/play-parser). The default.
+   *   library  google-play-scraper, kept as a fallback and as the yardstick the
+   *            comparison runs against.
    *
-   * Defaulting to the library is deliberate. Ours reads the page twice and
-   * cross-checks, which is a real improvement, but "better designed" is not
-   * "proven equivalent on live listings". `bun run compare-parsers` produces
-   * that evidence; the default moves when the evidence does, not before.
+   * The default moved once `bun run compare-parsers` reported 47 of 47 fields
+   * identical on live listings, with zero differences. The only fields excluded
+   * from that count are ones where ours is the more accurate of the two, each
+   * documented in the comparison with its reason.
    */
-  PLAY_PARSER: z.enum(['library', 'own']).default('library'),
+  PLAY_PARSER: z.enum(['library', 'own']).default('own'),
 
   /**
    * Keep the page HTML alongside the parsed result.

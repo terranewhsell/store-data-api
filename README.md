@@ -799,6 +799,69 @@ not something Valve measures.
 counts come from Valve when we have them and from SteamSpy in bulk otherwise;
 `authoritative` tells you which. See below.
 
+### Google Play: our own parser
+
+The client's position is that this service should own its scraping rather than
+delegate it. App Store and Steam always did: both are our own requests against
+Apple's and Valve's public APIs. Play was the exception, and this closes it.
+
+| Operation | Parser |
+|---|---|
+| App listing | **ours** |
+| Search | **ours** |
+| Developer catalogue | **ours** |
+| Similar apps | **ours** |
+| Category page | **ours** |
+| Top charts | library, with ours attempted first. See below. |
+
+**Why it is better, not merely independent.** Play ships its data as an
+obfuscated array addressed by numeric position, which is why every parser for it
+needs constant maintenance and why they all fail the same way: Google reorders
+something, every coordinate dies at once, and the parser returns undefined for
+everything without noticing.
+
+The same page also carries a schema.org `SoftwareApplication` block, Open Graph
+tags and microdata, which Google renders its own search results from. Those give
+title, developer, rating, rating count, price, currency, category, icon and
+content rating from a published contract Google has an interest in keeping
+stable.
+
+Reading the page twice makes the two readings comparable. When a coordinate
+drifts, its value stops matching the structured one and `_meta` reports the
+disagreement before anything is stored. A position-addressed parser cannot tell
+"this app has no rating" from "ratings moved"; this one can.
+
+It already pays for itself: `google-play-scraper` reports Google Translate's
+minimum Android version as "Varies with device", because its coordinate no
+longer resolves and it falls back to a placeholder. Ours reads the real value,
+6.0.
+
+**Verified, not asserted.** `bun run compare-parsers` runs both parsers over
+real listings and diffs them field by field:
+
+```
+apps: 6 | fields compared: 47 | identical: 47 | differing: 0
+```
+
+Excluded from that count, each with a stated reason: `url`, `score`, `ratings`
+and `price` (formatting), `reviews` and `histogram` (live counters, since the
+library insists on its own fetch), `androidVersion` (ours is right), `summary`
+(the library leaves HTML entities encoded and we decode them, which is the exact
+defect the client reported on the previous project) and `description`
+(whitespace).
+
+**Top charts are the honest exception.** Play loads TOP_FREE, TOP_PAID and
+GROSSING through `batchexecute`, its internal RPC, and there is no HTML to parse:
+the category page carries the words "Top free" with no app data underneath and no
+cluster token anywhere. Our implementation is written and tested — request
+construction, field mask, query parameters, response reader — and it still gets
+an empty stream back, because the library's HTTP client carries a cookie jar and
+a set of defaults we have not matched. So ours is attempted first and the library
+catches the fall, the log says which one served each request, and the day the
+transport is solved nothing else changes.
+
+`PLAY_PARSER=library` reverts everything to the library.
+
 ### SteamSpy: cost versus accuracy, stated plainly
 
 Valve's `appreviews` is one request per game. Three thousand Steam titles is three
@@ -820,7 +883,11 @@ it, and `authoritative: false` travels with the approximation.
 bun run ingest steamspy --pages 3   # top 3,000 games by owners, 3 requests
 ```
 
-Disable with `STEAMSPY_ENABLED=false` to always use Valve, at one request per game.
+**Off by default**, because SteamSpy is a third-party service and the client's
+position is not to depend on ones we do not control. With it off, review counts
+come from Valve's own endpoint at one request per game. `STEAMSPY_ENABLED=true`
+trades that independence for roughly a thousandfold reduction in requests, at
+about nine percent lower counts.
 
 SteamSpy's `owners` estimate spans an order of magnitude ("100,000,000 ..
 200,000,000") and is **not** surfaced as an install count anywhere in the
