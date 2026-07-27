@@ -1,0 +1,45 @@
+# Render blueprint.
+#
+# Deploys the API only. The database is external (Neon or Render Postgres) and
+# the data is seeded from a developer machine, not from here: a free web service
+# is put to sleep after 15 minutes of inactivity, which would kill a long ingest
+# halfway through and leave the catalogue half written.
+#
+# After the first deploy, set the two secret values in the Render dashboard:
+#   DATABASE_URL      the pooled connection string, with ?sslmode=require
+#   API_BEARER_TOKEN  generate with: openssl rand -hex 32
+#
+# Both are marked sync:false precisely so they never live in this file.
+
+services:
+  - type: web
+    name: store-data-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: LOG_LEVEL
+        value: info
+      # Never run the ingest worker on a free instance: it sleeps mid-run.
+      - key: INGEST_WORKER_ENABLED
+        value: false
+      # Read-mostly deployment, so the live search fallback stays off. Turn it on
+      # once the service is on a plan that does not sleep.
+      - key: LIVE_SEARCH_ENABLED
+        value: false
+      - key: DEFAULT_COUNTRY
+        value: us
+      - key: DEFAULT_LANG
+        value: en
+      # Set in the dashboard, not here.
+      - key: DATABASE_URL
+        sync: false
+      - key: API_BEARER_TOKEN
+        sync: false

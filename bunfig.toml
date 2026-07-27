@@ -1,0 +1,4 @@
+[test]
+# Environment has to be in place before src/config.ts is imported, since it
+# validates once at module load.
+preload = ["./tests/setup.ts"]

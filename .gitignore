@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+data/pgdata/
+coverage/
+.DS_Store
+
+# Internal working notes and client-facing drafts. Not for the handover repo.
+scraper-apps-steam.md
+MENSAJE-CLIENTE.md

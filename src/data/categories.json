@@ -1,0 +1,277 @@
+[
+  {
+    "id": "APPLICATION",
+    "slug": "application",
+    "name": "Application"
+  },
+  {
+    "id": "ANDROID_WEAR",
+    "slug": "android-wear",
+    "name": "Android Wear"
+  },
+  {
+    "id": "ART_AND_DESIGN",
+    "slug": "art-and-design",
+    "name": "Art And Design"
+  },
+  {
+    "id": "AUTO_AND_VEHICLES",
+    "slug": "auto-and-vehicles",
+    "name": "Auto And Vehicles"
+  },
+  {
+    "id": "BEAUTY",
+    "slug": "beauty",
+    "name": "Beauty"
+  },
+  {
+    "id": "BOOKS_AND_REFERENCE",
+    "slug": "books-and-reference",
+    "name": "Books And Reference"
+  },
+  {
+    "id": "BUSINESS",
+    "slug": "business",
+    "name": "Business"
+  },
+  {
+    "id": "COMICS",
+    "slug": "comics",
+    "name": "Comics"
+  },
+  {
+    "id": "COMMUNICATION",
+    "slug": "communication",
+    "name": "Communication"
+  },
+  {
+    "id": "DATING",
+    "slug": "dating",
+    "name": "Dating"
+  },
+  {
+    "id": "EDUCATION",
+    "slug": "education",
+    "name": "Education"
+  },
+  {
+    "id": "ENTERTAINMENT",
+    "slug": "entertainment",
+    "name": "Entertainment"
+  },
+  {
+    "id": "EVENTS",
+    "slug": "events",
+    "name": "Events"
+  },
+  {
+    "id": "FINANCE",
+    "slug": "finance",
+    "name": "Finance"
+  },
+  {
+    "id": "FOOD_AND_DRINK",
+    "slug": "food-and-drink",
+    "name": "Food And Drink"
+  },
+  {
+    "id": "HEALTH_AND_FITNESS",
+    "slug": "health-and-fitness",
+    "name": "Health And Fitness"
+  },
+  {
+    "id": "HOUSE_AND_HOME",
+    "slug": "house-and-home",
+    "name": "House And Home"
+  },
+  {
+    "id": "LIBRARIES_AND_DEMO",
+    "slug": "libraries-and-demo",
+    "name": "Libraries And Demo"
+  },
+  {
+    "id": "LIFESTYLE",
+    "slug": "lifestyle",
+    "name": "Lifestyle"
+  },
+  {
+    "id": "MAPS_AND_NAVIGATION",
+    "slug": "maps-and-navigation",
+    "name": "Maps And Navigation"
+  },
+  {
+    "id": "MEDICAL",
+    "slug": "medical",
+    "name": "Medical"
+  },
+  {
+    "id": "MUSIC_AND_AUDIO",
+    "slug": "music-and-audio",
+    "name": "Music And Audio"
+  },
+  {
+    "id": "NEWS_AND_MAGAZINES",
+    "slug": "news-and-magazines",
+    "name": "News And Magazines"
+  },
+  {
+    "id": "PARENTING",
+    "slug": "parenting",
+    "name": "Parenting"
+  },
+  {
+    "id": "PERSONALIZATION",
+    "slug": "personalization",
+    "name": "Personalization"
+  },
+  {
+    "id": "PHOTOGRAPHY",
+    "slug": "photography",
+    "name": "Photography"
+  },
+  {
+    "id": "PRODUCTIVITY",
+    "slug": "productivity",
+    "name": "Productivity"
+  },
+  {
+    "id": "SHOPPING",
+    "slug": "shopping",
+    "name": "Shopping"
+  },
+  {
+    "id": "SOCIAL",
+    "slug": "social",
+    "name": "Social"
+  },
+  {
+    "id": "SPORTS",
+    "slug": "sports",
+    "name": "Sports"
+  },
+  {
+    "id": "TOOLS",
+    "slug": "tools",
+    "name": "Tools"
+  },
+  {
+    "id": "TRAVEL_AND_LOCAL",
+    "slug": "travel-and-local",
+    "name": "Travel And Local"
+  },
+  {
+    "id": "VIDEO_PLAYERS",
+    "slug": "video-players",
+    "name": "Video Players"
+  },
+  {
+    "id": "WATCH_FACE",
+    "slug": "watch-face",
+    "name": "Watch Face"
+  },
+  {
+    "id": "WEATHER",
+    "slug": "weather",
+    "name": "Weather"
+  },
+  {
+    "id": "GAME",
+    "slug": "game",
+    "name": "Game"
+  },
+  {
+    "id": "GAME_ACTION",
+    "slug": "game-action",
+    "name": "Game Action"
+  },
+  {
+    "id": "GAME_ADVENTURE",
+    "slug": "game-adventure",
+    "name": "Game Adventure"
+  },
+  {
+    "id": "GAME_ARCADE",
+    "slug": "game-arcade",
+    "name": "Game Arcade"
+  },
+  {
+    "id": "GAME_BOARD",
+    "slug": "game-board",
+    "name": "Game Board"
+  },
+  {
+    "id": "GAME_CARD",
+    "slug": "game-card",
+    "name": "Game Card"
+  },
+  {
+    "id": "GAME_CASINO",
+    "slug": "game-casino",
+    "name": "Game Casino"
+  },
+  {
+    "id": "GAME_CASUAL",
+    "slug": "game-casual",
+    "name": "Game Casual"
+  },
+  {
+    "id": "GAME_EDUCATIONAL",
+    "slug": "game-educational",
+    "name": "Game Educational"
+  },
+  {
+    "id": "GAME_MUSIC",
+    "slug": "game-music",
+    "name": "Game Music"
+  },
+  {
+    "id": "GAME_PUZZLE",
+    "slug": "game-puzzle",
+    "name": "Game Puzzle"
+  },
+  {
+    "id": "GAME_RACING",
+    "slug": "game-racing",
+    "name": "Game Racing"
+  },
+  {
+    "id": "GAME_ROLE_PLAYING",
+    "slug": "game-role-playing",
+    "name": "Game Role Playing"
+  },
+  {
+    "id": "GAME_SIMULATION",
+    "slug": "game-simulation",
+    "name": "Game Simulation"
+  },
+  {
+    "id": "GAME_SPORTS",
+    "slug": "game-sports",
+    "name": "Game Sports"
+  },
+  {
+    "id": "GAME_STRATEGY",
+    "slug": "game-strategy",
+    "name": "Game Strategy"
+  },
+  {
+    "id": "GAME_TRIVIA",
+    "slug": "game-trivia",
+    "name": "Game Trivia"
+  },
+  {
+    "id": "GAME_WORD",
+    "slug": "game-word",
+    "name": "Game Word"
+  },
+  {
+    "id": "FAMILY",
+    "slug": "family",
+    "name": "Family"
+  },
+  {
+    "id": "GAME_WORLD",
+    "slug": "game-world",
+    "name": "Game World"
+  }
+]

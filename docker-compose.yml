@@ -1,0 +1,50 @@
+# Local stack: API plus Postgres, one command.
+#
+#   cp .env.example .env      # set API_BEARER_TOKEN
+#   docker compose up --build
+#
+# The API waits for Postgres to be healthy, then applies its own migrations at
+# boot, so there is no separate migration step.
+#
+# Ingestion is NOT run here. It is a separate command on purpose:
+#   docker compose run --rm api bun run ingest seed  --source play,ios,steam
+#   docker compose run --rm api bun run ingest promote --limit 200
+#   docker compose run --rm api bun run ingest drain   --limit 200
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: storedata
+      POSTGRES_PASSWORD: storedata
+      POSTGRES_DB: storedata
+    ports:
+      - '55432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U storedata -d storedata']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgres://storedata:storedata@db:5432/storedata
+      # Comes from your .env; never hardcode it here.
+      API_BEARER_TOKEN: ${API_BEARER_TOKEN:?set API_BEARER_TOKEN in .env}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Off by default. Ingestion is run explicitly, with `docker compose run`.
+      INGEST_WORKER_ENABLED: ${INGEST_WORKER_ENABLED:-false}
+    ports:
+      - '3000:3000'
+    restart: unless-stopped
+
+volumes:
+  pgdata:
