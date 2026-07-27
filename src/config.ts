@@ -84,20 +84,6 @@ const schema = z.object({
   STEAMSPY_PAGES: int(3),
 
   /**
-   * Which Google Play parser to use.
-   *
-   *   own      our own parser (src/sources/play-parser). The default.
-   *   library  google-play-scraper, kept as a fallback and as the yardstick the
-   *            comparison runs against.
-   *
-   * The default moved once `bun run compare-parsers` reported 47 of 47 fields
-   * identical on live listings, with zero differences. The only fields excluded
-   * from that count are ones where ours is the more accurate of the two, each
-   * documented in the comparison with its reason.
-   */
-  PLAY_PARSER: z.enum(['library', 'own']).default('own'),
-
-  /**
    * Keep the page HTML alongside the parsed result.
    *
    * Until now Play stored the library's OUTPUT as its raw payload, which meant
@@ -107,19 +93,6 @@ const schema = z.object({
    */
   PLAY_STORE_HTML: bool(true),
 
-  /**
-   * Attempt our own top-chart RPC before falling back to the library.
-   *
-   * OFF by default because it does not work yet. Play loads charts through
-   * `batchexecute` and our request, though byte-identical in body to a working
-   * one, still receives an empty stream: the library's HTTP client carries a
-   * cookie jar and defaults we have not matched.
-   *
-   * Shipping an attempt that always fails costs a wasted request per chart and
-   * a confusing warning in the log, so the default is not to try. The code is
-   * complete and tested; turn this on to work on it.
-   */
-  PLAY_OWN_CHARTS: bool(false),
 
   // Backoff on failure.
   BACKOFF_BASE_MS: int(5000),

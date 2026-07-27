@@ -812,7 +812,7 @@ Apple's and Valve's public APIs. Play was the exception, and this closes it.
 | Developer catalogue | **ours** |
 | Similar apps | **ours** |
 | Category page | **ours** |
-| Top charts | library, with ours attempted first. See below. |
+| Top charts | **ours** |
 
 **Why it is better, not merely independent.** Play ships its data as an
 obfuscated array addressed by numeric position, which is why every parser for it
@@ -850,17 +850,17 @@ library insists on its own fetch), `androidVersion` (ours is right), `summary`
 defect the client reported on the previous project) and `description`
 (whitespace).
 
-**Top charts are the honest exception.** Play loads TOP_FREE, TOP_PAID and
-GROSSING through `batchexecute`, its internal RPC, and there is no HTML to parse:
-the category page carries the words "Top free" with no app data underneath and no
-cluster token anywhere. Our implementation is written and tested — request
-construction, field mask, query parameters, response reader — and it still gets
-an empty stream back, because the library's HTTP client carries a cookie jar and
-a set of defaults we have not matched. So ours is attempted first and the library
-catches the fall, the log says which one served each request, and the day the
-transport is solved nothing else changes.
+**Top charts** come through `batchexecute`, Google's internal RPC, because there
+is no HTML to parse: the category page carries the words "Top free" with no app
+data underneath. That request is built here from its parts; the only transcribed
+piece is the field selector in `list-protocol.ts`, a wire-format constant with no
+logic in it. Verified against the reference implementation: all three charts,
+same apps, same order.
 
-`PLAY_PARSER=library` reverts everything to the library.
+`google-play-scraper` is a **dev dependency**. It is imported by
+`bun run compare-parsers` and by one test that checks our category list still
+matches its constants. The production image is built with `--production` and does
+not contain it; nothing under `src/` outside that one CLI imports it.
 
 ### SteamSpy: cost versus accuracy, stated plainly
 

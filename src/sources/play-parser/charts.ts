@@ -30,46 +30,30 @@ import {
 } from './list-protocol.ts'
 
 const ENDPOINT = 'https://play.google.com/_/PlayStoreUi/data/batchexecute'
-const WARMUP = 'https://play.google.com/store/apps'
+export type PlayCollection = 'TOP_FREE' | 'TOP_PAID' | 'GROSSING'
 
 /**
- * Cookies, which this endpoint requires.
+ * The names Google actually expects on the wire.
  *
- * Diagnosed the slow way. The request was rejected with an empty stream, then
- * with a 400, until the difference turned out to be that Google's own front end
- * has already been given cookies by the time it makes this call. Sending the
- * same body without them fails; sending it with them works.
+ * `TOP_FREE` is the name the client asked for and the name this API serves. It
+ * is not what the RPC understands. Send it and the call answers 200 with an
+ * empty stream, and nothing anywhere says why.
  *
- * So a page is fetched first to be issued cookies, and they are reused for the
- * rest of the process. One extra request at startup, not one per chart.
+ * This single mapping was the whole reason charts did not work. The envelope,
+ * the field mask, the response reader and the transport were all correct from
+ * the start. It was found by capturing the bytes a working request actually
+ * sends and diffing them against ours: 23,208 bytes against 23,201, identical
+ * until byte 23,074, where one said `topselling_free` and the other `TOP_FREE`.
+ *
+ * Worth remembering the shape of that: hours went into cookies, HTTP versions,
+ * user agents and query parameters, all of it guessing at a symptom. The diff
+ * took two minutes and was conclusive.
  */
-let cookieHeader: string | null = null
-
-async function ensureCookies(lang: string, country: string): Promise<string> {
-  if (cookieHeader !== null) return cookieHeader
-
-  const res = await fetch(`${WARMUP}?hl=${encodeURIComponent(lang)}&gl=${encodeURIComponent(country)}`, {
-    headers: {
-      'user-agent': config.HTTP_USER_AGENT,
-      accept: 'text/html,application/xhtml+xml',
-    },
-  })
-
-  const jar = res.headers.getSetCookie?.() ?? []
-  cookieHeader = jar
-    .map((entry) => entry.split(';')[0])
-    .filter((pair): pair is string => typeof pair === 'string' && pair.includes('='))
-    .join('; ')
-
-  return cookieHeader
+const WIRE_COLLECTION: Record<PlayCollection, string> = {
+  TOP_FREE: 'topselling_free',
+  TOP_PAID: 'topselling_paid',
+  GROSSING: 'topgrossing',
 }
-
-/** Exposed so a failure can force a fresh set rather than retrying stale ones. */
-export function resetChartCookies(): void {
-  cookieHeader = null
-}
-
-export type PlayCollection = 'TOP_FREE' | 'TOP_PAID' | 'GROSSING'
 
 export interface ChartParams {
   collection: PlayCollection
@@ -98,7 +82,9 @@ function buildRpcArgument(params: ChartParams): string {
     PLAY_LIST_GROUPING,
   ]
 
-  return JSON.stringify([[null, requestOptions, [2, params.collection, params.category]]])
+  return JSON.stringify([
+    [null, requestOptions, [2, WIRE_COLLECTION[params.collection], params.category]],
+  ])
 }
 
 function buildBody(params: ChartParams): string {
@@ -152,47 +138,27 @@ export function parseBatchExecute(text: string, rpcId: string): unknown {
  */
 export async function fetchChart(params: ChartParams): Promise<ListedApp[]> {
   /**
-   * The endpoint is particular about its query string, and the parameters are
-   * not decoration: without them it answers 200 with an empty stream, which is
-   * the most misleading failure available. Learned the hard way here.
+   * Three parameters. Everything else was cargo.
    *
-   *   rt=c          selects the chunked response format this module parses
-   *   source-path   the page the call claims to come from
-   *   bl, f.sid     build label and session id the front end normally supplies
-   *   soc-*         client platform identifiers
-   *   _reqid        request sequence number
+   * Chasing the empty responses, this URL accumulated a session id, a build
+   * label, client platform flags, a request counter, an `rt=c` response-format
+   * selector, cookies from a warm-up fetch and three extra headers. Once the
+   * real cause was found, each was removed and measured: the call works with
+   * `rpcids`, `hl` and `gl` alone. None of the rest was ever doing anything.
    */
   const query = new URLSearchParams({
     rpcids: PLAY_LIST_RPC_ID,
-    'source-path': '/store/apps',
-    'f.sid': '-4178618388443751758',
-    bl: 'boq_playuiserver_20220612.08_p0',
-    authuser: '0',
-    'soc-app': '121',
-    'soc-platform': '1',
-    'soc-device': '1',
-    _reqid: String(80000 + Math.floor(Math.random() * 9999)),
-    rt: 'c',
     hl: params.lang,
     gl: params.country,
   })
   const url = `${ENDPOINT}?${query.toString()}`
-
-  const cookies = await ensureCookies(params.lang, params.country)
 
   const text = await pacers.play.run(() =>
     fetchText('play', url, {
       method: 'POST',
       body: buildBody(params),
       timeoutMs: config.HTTP_TIMEOUT_MS,
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
-        accept: '*/*',
-        'x-same-domain': '1',
-        origin: 'https://play.google.com',
-        referer: 'https://play.google.com/store/apps',
-        ...(cookies.length > 0 ? { cookie: cookies } : {}),
-      },
+      headers: { 'content-type': 'application/x-www-form-urlencoded;charset=UTF-8' },
     }),
   )
 

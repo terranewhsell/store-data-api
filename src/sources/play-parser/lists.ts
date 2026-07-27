@@ -17,8 +17,21 @@
 import { decodeEntities } from '../../lib/html.ts'
 import { parseDataStore, type DataStore } from './datastore.ts'
 
-/** `com.example.app`, at least three segments. */
-const PACKAGE_ID = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+){2,}$/i
+/**
+ * An Android package name.
+ *
+ * TWO segments is the minimum, not three. `com.antivirus` and `com.whatsapp` are
+ * real package names, and an earlier version of this pattern demanded three
+ * segments and silently dropped every app with a short one from search results,
+ * developer catalogues and charts alike. It surfaced as our GROSSING chart
+ * returning nine entries where the reference returned ten.
+ *
+ * Two segments is loose enough to match things like `play.google` on its own, so
+ * this never runs on free-floating strings: the caller only tests it at the
+ * structural position where a list entry keeps its id, and the position does the
+ * rest of the filtering.
+ */
+const PACKAGE_ID = /^[a-z][a-z0-9_]{1,}(\.[a-z0-9_]+)+$/i
 
 export interface ListedApp {
   appId: string

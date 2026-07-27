@@ -377,8 +377,22 @@ describe('app lists: search, developer, similar, category', () => {
     expect(apps).toHaveLength(1)
   })
 
-  test('ignores strings that merely look dotted', () => {
-    const apps = parseAppListHtml(listPage([{ appId: 'not.a', title: 'Too short' }]), {
+  test('accepts two-segment package names', () => {
+    // com.antivirus and com.whatsapp are real. Demanding three segments dropped
+    // them silently from every list, which showed up as a chart returning nine
+    // entries where the reference returned ten.
+    const apps = parseAppListHtml(
+      listPage([
+        { appId: 'com.antivirus', title: 'AVG AntiVirus' },
+        { appId: 'com.whatsapp', title: 'WhatsApp' },
+      ]),
+      { lang: 'en', country: 'us' },
+    )
+    expect(apps.map((a) => a.appId)).toEqual(['com.antivirus', 'com.whatsapp'])
+  })
+
+  test('ignores a single unqualified word', () => {
+    const apps = parseAppListHtml(listPage([{ appId: 'notapackage', title: 'No dots' }]), {
       lang: 'en',
       country: 'us',
     })
