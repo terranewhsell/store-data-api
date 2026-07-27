@@ -22,7 +22,7 @@ import { PLAY_INGESTABLE_CATEGORY_IDS } from '../data/categories.ts'
 import { closeDb, getDb } from '../db/client.ts'
 import { runMigrations } from '../db/migrate.ts'
 import { logger } from '../lib/logger.ts'
-import { allPacerStates } from '../lib/pacer.ts'
+import { allPacerStates, sleep } from '../lib/pacer.ts'
 import type { Source } from '../normalize/contract.ts'
 import {
   discoverFromAppleChart,
@@ -62,6 +62,39 @@ const sources = (arg('source', 'play,ios,steam') as string)
   .map((s) => s.trim())
   .filter((s): s is Source => s === 'play' || s === 'ios' || s === 'steam')
 
+/**
+ * Retries a discovery step once before giving up on it.
+ *
+ * Discovery is a single request that gates everything downstream: if the Apple
+ * chart call times out, the run produces zero App Store apps no matter how long
+ * it goes on afterwards. Observed exactly that, from one transient 20-second
+ * timeout on a request that answers in about a second normally.
+ *
+ * One retry, because the failure this covers is a blip. Anything persistent
+ * should surface rather than be papered over, and the per-app fetch queue has
+ * its own backoff for real outages.
+ */
+async function withOneRetry<T>(
+  label: string,
+  context: Record<string, unknown>,
+  fn: () => Promise<T>,
+): Promise<T | null> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      const last = attempt === 2
+      logger.warn(last ? `${label} failed, continuing` : `${label} failed, retrying once`, {
+        ...context,
+        error: String(error).slice(0, 160),
+      })
+      if (last) return null
+      await sleep(3000)
+    }
+  }
+  return null
+}
+
 /** Discovery only. Cheap, safe, and never turns straight into downloads. */
 async function discover(): Promise<number> {
   let discovered = 0
@@ -71,53 +104,42 @@ async function discover(): Promise<number> {
       const categories = PLAY_INGESTABLE_CATEGORY_IDS.slice(0, categoryCount)
       for (const categoryId of categories) {
         for (const collection of ['TOP_FREE', 'TOP_PAID', 'GROSSING'] as const) {
-          try {
-            const result = await discoverFromPlayRanking({
+          // One category failing must not abandon the other fifty-three.
+          const result = await withOneRetry('play ranking', { collection, categoryId, market }, () =>
+            discoverFromPlayRanking({
               collection,
               categoryId,
               country: market.country,
               lang: market.lang,
               num: perList,
-            })
-            discovered += result.discovered
-          } catch (error) {
-            // One category failing must not abandon the other fifty-three.
-            logger.warn('play ranking failed, continuing', {
-              collection,
-              categoryId,
-              market,
-              error: String(error),
-            })
-          }
+            }),
+          )
+          if (result) discovered += result.discovered
         }
       }
     }
 
     if (sources.includes('ios')) {
       for (const chart of ['top-free', 'top-paid'] as const) {
-        try {
-          const result = await discoverFromAppleChart({
+        const result = await withOneRetry('apple chart', { chart, market }, () =>
+          discoverFromAppleChart({
             chart,
             country: market.country,
             lang: market.lang,
             limit: perList,
-          })
-          discovered += result.discovered
-        } catch (error) {
-          logger.warn('apple chart failed, continuing', { chart, market, error: String(error) })
-        }
+          }),
+        )
+        if (result) discovered += result.discovered
       }
     }
   }
 
   if (sources.includes('steam')) {
     const market = markets[0] ?? { country: config.DEFAULT_COUNTRY, lang: config.DEFAULT_LANG }
-    try {
-      const result = await discoverFromSteamMostPlayed(market)
-      discovered += result.discovered
-    } catch (error) {
-      logger.warn('steam chart failed, continuing', { error: String(error) })
-    }
+    const result = await withOneRetry('steam chart', { market }, () =>
+      discoverFromSteamMostPlayed(market),
+    )
+    if (result) discovered += result.discovered
   }
 
   return discovered
