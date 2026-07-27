@@ -335,6 +335,18 @@ export interface MinimumOs {
 export interface ReviewSummary {
   positive: number | null
   negative: number | null
+  /**
+   * Ratings that endorse neither side.
+   *
+   * Only a five-point scale has these; Steam's thumb is binary, so it is null
+   * there. Exposed rather than folded into one side so that a consumer who
+   * disagrees with our convention can recompute the ratio their own way without
+   * us redeploying anything. That is the point: the mapping between an
+   * incommensurable five-point scale and a binary one is a judgement, so it is
+   * made visible and reversible instead of merely documented.
+   */
+  neutral: number | null
+  /** positive + negative. The comparison base, excluding neutral. */
   total: number | null
   /** 0-100, one decimal. */
   percentPositive: number | null

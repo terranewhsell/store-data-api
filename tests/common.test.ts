@@ -133,10 +133,29 @@ describe('review summary', () => {
     expect(summary.provenance.derivedFrom).toContain('three-star')
   })
 
-  test('Play states how many neutral ratings it excluded', () => {
-    const { common } = normalizePlayApp(PLAY_TRANSLATE, MARKET)
-    // Nobody should have to reverse-engineer why total is smaller than ratings.
-    expect(common.reviewSummary?.provenance.derivedFrom).toContain('375720')
+  test('Play reports the neutral bucket instead of hiding it', () => {
+    const { common, core } = normalizePlayApp(PLAY_TRANSLATE, MARKET)
+    const s = common.reviewSummary!
+
+    // Exposed, not folded into a side: a consumer who prefers another convention
+    // can recompute the ratio without us redeploying.
+    expect(s.neutral).toBe(375720)
+    expect(s.total).toBe(s.positive! + s.negative!)
+
+    // Google's own five buckets do not sum to its ratings count, so no
+    // convention would make these equal. Better shown than hidden.
+    const bucketSum = s.positive! + s.negative! + s.neutral!
+    expect(bucketSum).not.toBe(core.ratings)
+  })
+
+  test('a binary scale reports no neutral bucket', () => {
+    // Steam's thumb has no middle, so null rather than zero: zero would claim
+    // nobody was ambivalent, which is not something Valve measures.
+    const valve = reviewSummaryFromValve({
+      positive: 900, negative: 100, total: 1000, label: 'Very Positive',
+    })
+    expect(valve?.neutral).toBeNull()
+    expect(reviewSummaryFromSteamSpy({ positive: 8, negative: 2 })?.neutral).toBeNull()
   })
 
   test('Valve numbers are marked authoritative', () => {

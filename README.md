@@ -744,12 +744,40 @@ but genuinely comparable, and all three can produce one — two directly, one by
 derivation. Where it is derived, `derivedFrom` says exactly how. `histogram` still
 stays null for Steam rather than being reconstructed.
 
-For Play the split excludes three-star ratings rather than forcing them onto a
-side, and says how many it excluded:
+For Play the split excludes three-star ratings from the **ratio** and reports them
+in `neutral`, so the whole distribution is visible:
 
 ```json
-"derivedFrom": "histogram: 4-5 stars counted positive, 1-2 negative, 375720 three-star ratings excluded as neutral"
+"reviewSummary": {
+  "positive": 218322156,   // 4-5 stars
+  "neutral":    8342491,   // 3 stars, outside the ratio
+  "negative":  13090681,   // 1-2 stars
+  "total":    231412837,   // positive + negative
+  "percentPositive": 94.3
+}
 ```
+
+Why exclude rather than pick a side: a Steam thumbs-up means "I recommend this"
+and a three-star rating means "it is okay". Measured across our corpus, counting
+three stars as positive moves the figure by 0.1 to 1.2 points; counting it as
+negative moves it by 3 to 4. Excluding it and exposing the count is the only
+option that does not quietly assert one of those.
+
+**`total` is smaller than `ratings`, and no convention fixes that.** Google's own
+five buckets do not sum to its own `ratings` count: on every app measured the
+histogram is 24 to 82 ratings short. Since nothing reconciles them exactly,
+exposing `neutral` is better than picking a convention that appears to.
+
+A consumer who prefers a different convention computes it from the fields:
+
+```js
+// three stars as positive
+const pct = (positive + neutral) / (total + neutral) * 100   // 94.5 vs 94.3
+```
+
+`neutral` is null for Steam: its thumb is binary, so there is no middle to report.
+Null rather than zero, because zero would claim nobody was ambivalent, and that is
+not something Valve measures.
 
 **`provenance` exists because not every provider is the store.** Steam review
 counts come from Valve when we have them and from SteamSpy in bulk otherwise;

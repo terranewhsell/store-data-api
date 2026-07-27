@@ -140,11 +140,19 @@ export function steamMinimumOs(details: Record<string, unknown>): MinimumOs | nu
  * with Steam, so it is done here and marked as derived. The histogram itself is
  * untouched and remains the better field for anyone who wants it.
  *
- * Three-star ratings are excluded from both sides rather than being forced into
- * one. On Steam a review is a thumbs up or down with no middle; the closest
- * honest analogue is to drop the middle rather than to invent a side for it. The
- * count dropped is stated in `derivedFrom` so nobody has to reverse-engineer why
- * `total` is smaller than `ratings`.
+ * Three-star ratings are excluded from the RATIO and reported in `neutral`.
+ *
+ * A Steam thumbs-up means "I recommend this". A three-star rating means "it is
+ * okay". Counting the second as the first inflates every Play app against every
+ * Steam one, which defeats the comparability that justifies this field existing
+ * at all. Counting it as negative is worse: measured across our corpus it moves
+ * the figure by three to four points, against 0.1 to 1.2 for excluding it.
+ *
+ * Note also that Google's own numbers do not reconcile: summing the five buckets
+ * gives between 24 and 82 fewer than the `ratings` count on every app measured.
+ * So no convention makes `total` equal `ratings`, and picking one to try would
+ * only hide the discrepancy. Exposing `neutral` lets a consumer see the whole
+ * distribution and compute whatever ratio they prefer.
  */
 export function reviewSummaryFromHistogram(histogram: Histogram | null): ReviewSummary | null {
   if (histogram === null) return null
@@ -158,6 +166,7 @@ export function reviewSummaryFromHistogram(histogram: Histogram | null): ReviewS
   return {
     positive,
     negative,
+    neutral,
     total,
     percentPositive: Number(((positive / total) * 100).toFixed(1)),
     // Google publishes no wording for this; inventing one would be a fabrication.
@@ -167,8 +176,8 @@ export function reviewSummaryFromHistogram(histogram: Histogram | null): ReviewS
       authoritative: true,
       fetchedAt: null,
       derivedFrom:
-        `histogram: 4-5 stars counted positive, 1-2 negative, ` +
-        `${neutral} three-star ratings excluded as neutral`,
+        `histogram: 4-5 stars positive, 1-2 negative, ${neutral} three-star ` +
+        `ratings reported separately in "neutral" and excluded from the ratio`,
     },
   }
 }
@@ -196,6 +205,8 @@ export function reviewSummaryFromValve(
   return {
     positive,
     negative,
+    // Steam's thumb is binary: there is no middle option to report.
+    neutral: null,
     total,
     percentPositive:
       positive === null ? null : Number(((positive / total) * 100).toFixed(1)),
@@ -226,6 +237,7 @@ export function reviewSummaryFromSteamSpy(
   return {
     positive,
     negative,
+    neutral: null,
     total,
     percentPositive: positive === null ? null : Number(((positive / total) * 100).toFixed(1)),
     // SteamSpy does not publish Valve's wording, and guessing the band from the
