@@ -19,7 +19,14 @@ services:
       POSTGRES_PASSWORD: storedata
       POSTGRES_DB: storedata
     ports:
-      - '55432:5432'
+      # Published only so you can attach psql from the host. The API reaches the
+      # database over the internal network and does not need this.
+      #
+      # Configurable because a hardcoded host port is the most common reason a
+      # compose file fails on someone else's machine: anything already listening
+      # on 55432 makes the whole stack refuse to start. Override with
+      # DB_PORT=15432 docker compose up
+      - '${DB_PORT:-55432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -43,7 +50,8 @@ services:
       # Off by default. Ingestion is run explicitly, with `docker compose run`.
       INGEST_WORKER_ENABLED: ${INGEST_WORKER_ENABLED:-false}
     ports:
-      - '3000:3000'
+      # Override with API_PORT=8080 docker compose up
+      - '${API_PORT:-3000}:3000'
     restart: unless-stopped
 
 volumes:
