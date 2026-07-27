@@ -423,6 +423,7 @@ curl -s -H "$AUTH" "$API/v1/top?sort=TOP_FREE&source=play&category=TOOLS&per_pag
   "source": "play",
   "sort": "TOP_FREE",
   "category": "APPLICATION",
+  "items_ingested": 40,
   "captured_at": "2026-07-26T23:31:15.151Z",
   "expires_at": "2026-07-27T05:31:15.151Z",
   "age_seconds": 2050,
@@ -433,6 +434,11 @@ curl -s -H "$AUTH" "$API/v1/top?sort=TOP_FREE&source=play&category=TOOLS&per_pag
 Items come back in stored ranking position and are never re-sorted, so the same
 snapshot always renders identically. The freshness of the *chart* is reported
 separately from the freshness of the listings inside it.
+
+`total` is the size of the chart Google published; `items_ingested` is how many
+of those listings we hold. On a fresh catalogue they differ, and a chart of
+twenty with an empty page is not a failure, it is twenty apps we know about and
+have not fetched yet. Run the seed for longer and the two converge.
 
 Charts that do not exist are refused with an explanation rather than substituted:
 

@@ -310,7 +310,10 @@ export async function getApp(
 
 export interface RankingResult {
   items: AppSummary[]
+  /** Size of the chart Google published. */
   total: number
+  /** How many of those listings we hold. Lower than `total` on a fresh catalogue. */
+  ingested: number
   capturedAt: string | null
   expiresAt: string | null
   ageSeconds: number | null
@@ -351,7 +354,15 @@ export async function getRanking(params: {
 
   const snapshot = snapshots[0]
   if (!snapshot) {
-    return { items: [], total: 0, capturedAt: null, expiresAt: null, ageSeconds: null, stale: true }
+    return {
+      items: [],
+      total: 0,
+      ingested: 0,
+      capturedAt: null,
+      expiresAt: null,
+      ageSeconds: null,
+      stale: true,
+    }
   }
 
   const rows = await db
@@ -401,11 +412,26 @@ export async function getRanking(params: {
     Math.floor((Date.now() - snapshot.capturedAt.getTime()) / 1000),
   )
 
+  const ingestedRows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(rankingItems)
+    .innerJoin(apps, and(eq(apps.sourceId, rankingItems.sourceId), eq(apps.source, params.source)))
+    .innerJoin(
+      appLocales,
+      and(
+        eq(appLocales.appId, apps.id),
+        eq(appLocales.country, params.country),
+        eq(appLocales.lang, params.lang),
+      ),
+    )
+    .where(eq(rankingItems.snapshotId, snapshot.id))
+
   return {
     items,
     // The snapshot's own count, not the joined count: an app in the ranking whose
     // listing we have not ingested yet is still in the ranking.
     total: snapshot.itemCount,
+    ingested: Number(ingestedRows[0]?.count ?? 0),
     capturedAt: snapshot.capturedAt.toISOString(),
     expiresAt: snapshot.expiresAt.toISOString(),
     ageSeconds,

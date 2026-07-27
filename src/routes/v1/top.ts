@@ -124,6 +124,17 @@ topRoutes.get('/top', async (c) => {
     source,
     sort: collection,
     category: categoryId,
+    /**
+     * `total` is the size of the chart; `items_ingested` is how many of those
+     * listings we actually hold.
+     *
+     * They differ on a fresh catalogue, and without saying so the response looks
+     * broken: a chart of twenty with an empty page reads as a failure rather
+     * than as "we know about these twenty apps and have not fetched them yet".
+     * Reporting the joined count as `total` instead would be worse, because it
+     * would claim the chart is smaller than it is.
+     */
+    items_ingested: ranking.ingested,
     // The freshness of the chart itself, separate from the freshness of the
     // listings in it. A consumer building a page needs both.
     captured_at: ranking.capturedAt,

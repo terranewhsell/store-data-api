@@ -292,6 +292,15 @@ describe('GET /v1/top', () => {
     )
   })
 
+  test('says how many of the charted apps we actually hold', async () => {
+    // total is the size of the chart; items_ingested is what we have. On a fresh
+    // catalogue they differ, and a chart of twenty with an empty page reads as a
+    // failure unless the response says which is which.
+    const body = await json(await get('/v1/top?sort=TOP_FREE'))
+    expect(body.total).toBe(2)
+    expect(body.items_ingested).toBe(2)
+  })
+
   test('reports the age of the chart separately from the listings', async () => {
     const body = await json(await get('/v1/top?sort=TOP_FREE'))
     expect(typeof body.captured_at).toBe('string')
